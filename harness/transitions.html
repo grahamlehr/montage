@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Transitions harness</title>
+    <style>
+      body {
+        font: 12px system-ui;
+        background: #222;
+        color: #ddd;
+        margin: 8px;
+      }
+      h2 {
+        margin: 12px 0 4px;
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        gap: 4px;
+        align-items: flex-start;
+        margin-bottom: 6px;
+      }
+      figure {
+        margin: 0;
+      }
+      canvas {
+        display: block;
+        border: 1px solid #555;
+      }
+      figcaption {
+        font-size: 10px;
+      }
+      .lbl {
+        width: 90px;
+        flex: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="status">running…</div>
+    <div id="out"></div>
+    <script type="module" src="./transitions.ts"></script>
+  </body>
+</html>
