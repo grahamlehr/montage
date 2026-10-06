@@ -2,11 +2,14 @@
 
 Turn photos into an MP4 montage, entirely in the browser.
 
-> _Screenshot placeholder — updated at v1._
+**Try it:** https://grahamlehr.github.io/montage/ (latest desktop Chrome)
+
+![Montage editing a 1080×1080 montage](docs/screenshot.png)
 
 ## Features
 - Drop in ~50 photos: JPEG, PNG, WebP, AVIF, GIF (first frame) and **HEIC/HEIF**. Reorder, remove, shuffle.
-- Any output size: presets (9:16, 16:9, 1:1, 4:5, 4:3, 3:4, 21:9, 2:3) or arbitrary W×H from 128 to 4096 px.
+- Any output size: presets (9:16, 16:9, 1:1, 4:5, 4:3, 3:4, 21:9, 2:3) or arbitrary W×H from 128 to 4096 px per side,
+  up to 9.4 MP in total (e.g. 4096×2304 or 3072×3072) — the largest frame Chrome's H.264 encoders accept.
 - Set the total length; per-photo timing is derived, with an optional dynamic rhythm.
 - Motion styles (Ken Burns, zoom, pan) and 11 transitions, combined from pools in sequence or seeded
   random order, with per-photo overrides.
