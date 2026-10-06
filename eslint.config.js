@@ -18,6 +18,10 @@ export default tseslint.config(
     },
   },
   {
+    files: ['harness/**/*.{ts,tsx}'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
+  {
     files: ['src/engine/**/*.ts', 'src/render/**/*.ts'],
     rules: {
       'no-restricted-properties': [

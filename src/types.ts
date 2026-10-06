@@ -80,6 +80,9 @@ export interface Timeline {
   segments: Segment[];
 }
 
+/** Result of engine `buildTimeline()`; `error` is a user-facing validation message (§4.1 step 4). */
+export type BuildResult = { ok: true; timeline: Timeline } | { ok: false; error: string };
+
 export interface Layer {
   photoIndex: number;
   fit: FitMode;
