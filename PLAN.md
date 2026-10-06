@@ -15,7 +15,7 @@ Section 8 is the orchestration playbook, section 9 the GitHub setup; sections 1�
 |---|---|---|
 | R1 | Accept multiple photos | Drag-drop / file picker. JPEG, PNG, WebP, AVIF, GIF (first frame), **HEIC/HEIF**. Reorder, remove, shuffle. Design load: **~50 photos**. |
 | R2 | Output MP4 download | H.264 (AVC) in MP4 via WebCodecs + Mediabunny. No audio track. |
-| R3 | Configurable dimensions | Presets **and arbitrary W×H** (non-standard aspect ratios). Design load: **1080×1920**. Range 128–4096 px per side, forced even. |
+| R3 | Configurable dimensions | Presets **and arbitrary W×H** (non-standard aspect ratios). Design load: **1080×1920**. Range 128–4096 px per side, forced even, **and W×H ≤ 36,864 macroblocks (≈9.4 Mpx, e.g. 4096×2304 / 3072×3072)** — Chrome's H.264 encoders reject larger frames (decided with the user in wave 3, #19). |
 | R4 | Configurable length | **Total duration** (seconds). Per-photo time is derived. |
 | R5 | Animation styles | Motion (within a photo) + transitions (between photos). Styles can be **combined**: a pool of enabled styles applied across the montage (sequence or seeded random), plus **per-photo overrides**. |
 | R6 | Speed | **Three independent sliders**: *Transition speed*, *Motion intensity*, *Pacing*. |
