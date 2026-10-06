@@ -16,7 +16,7 @@ export interface MontageState {
 
   addPhotos(items: PhotoItem[]): void;
   /** Patch a photo (e.g. loading -> ready with thumbUrl). */
-  updatePhoto(id: string, patch: Partial<Omit<PhotoItem, 'source'>>): void;
+  updatePhoto(id: string, patch: Partial<PhotoItem>): void;
   removePhoto(id: string): void;
   reorder(fromIndex: number, toIndex: number): void;
   moveById(activeId: string, overId: string): void;
