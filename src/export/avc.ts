@@ -29,7 +29,7 @@ export class AvcLevelError extends Error {
   readonly height: number;
   readonly fps: number;
   constructor(width: number, height: number, fps: number) {
-    super(`No H.264 level supports ${width}x${height} at ${fps} fps.`);
+    super(`H.264 cannot represent ${width}×${height} at ${fps} fps. Try a smaller size or a lower frame rate.`);
     this.name = 'AvcLevelError';
     this.width = width;
     this.height = height;

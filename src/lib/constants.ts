@@ -55,3 +55,28 @@ export function estimateFileBytes(
 ): number {
   return Math.round((estimateBitrate(s) * s.totalDuration) / 8);
 }
+
+/**
+ * Maximum frame size in 16×16 macroblocks. Chrome's H.264 encoders (hardware and software) reject
+ * anything above the level 5.1/5.2 MaxFS of 36,864 MBs (≈9.4 Mpx), e.g. 4096×2304 or 3072×3072.
+ * Per side stays 128–4096 (R3), but W×H must also satisfy this cap.
+ */
+export const MAX_MACROBLOCKS = 36864;
+
+export function macroblocks(width: number, height: number): number {
+  return Math.ceil(width / 16) * Math.ceil(height / 16);
+}
+
+export function fitsEncoderArea(width: number, height: number): boolean {
+  return macroblocks(width, height) <= MAX_MACROBLOCKS;
+}
+
+/**
+ * Largest even height (≥ DIM_MIN) that fits the macroblock cap for a given width. Use to clamp the
+ * edited dimension's partner; returns `height` unchanged when it already fits.
+ */
+export function maxEvenHeightFor(width: number, height = DIM_MAX): number {
+  const maxMbRows = Math.floor(MAX_MACROBLOCKS / Math.ceil(width / 16));
+  const cap = Math.max(DIM_MIN, Math.min(DIM_MAX, maxMbRows * 16));
+  return Math.min(height, cap - (cap % 2));
+}

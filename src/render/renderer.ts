@@ -1,5 +1,5 @@
 import type { FitMode, FrameDescriptor, Layer, Renderer } from '../types';
-import { blurSize, parseHex, placePhoto } from './layout';
+import { backdropPlacement, blurSize, parseHex, placePhoto } from './layout';
 import type { TransitionProgramSpec } from './transitionSpec';
 import { transitionPrograms } from './transitions/index';
 
@@ -290,7 +290,7 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
         b.tex,
         width,
         height,
-        { cx: width / 2, cy: height / 2, w: width, h: height },
+        backdropPlacement(width, height, layer.focus, layer.transform),
         BLUR_DARKEN,
         true,
       );

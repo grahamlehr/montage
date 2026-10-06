@@ -20,8 +20,40 @@ interface Result {
 declare global {
   interface Window {
     harnessResult?: unknown;
+    /** Render one frame and return raw RGBA (base64) + dimensions; used by pixel-compare scripts. */
+    renderCase?: (c: RenderCase) => Promise<{ w: number; h: number; b64: string }>;
   }
 }
+
+interface RenderCase {
+  w: number;
+  h: number;
+  fit: 'cover' | 'contain' | 'blur';
+  t: { scale: number; tx: number; ty: number };
+  focus: { x: number; y: number };
+  bg?: string;
+  photo?: [number, number];
+}
+let caseBitmap: Promise<ImageBitmap> | null = null;
+window.renderCase = async (c) => {
+  caseBitmap ??= makeTestBitmap();
+  const bmp = await caseBitmap;
+  const canvas = document.createElement('canvas');
+  const r = createRenderer(canvas);
+  r.setSize(c.w, c.h);
+  r.setBackground(c.bg ?? BG_HEX);
+  r.setPhoto(0, bmp);
+  r.draw(single(layer(0, c.fit, c.t, c.focus)));
+  const o = new OffscreenCanvas(c.w, c.h);
+  const g = o.getContext('2d', { willReadFrequently: true })!;
+  g.drawImage(canvas, 0, 0);
+  const data = g.getImageData(0, 0, c.w, c.h).data;
+  r.dispose();
+  let bin = '';
+  for (let i = 0; i < data.length; i += 0x8000)
+    bin += String.fromCharCode(...data.subarray(i, i + 0x8000));
+  return { w: c.w, h: c.h, b64: btoa(bin) };
+};
 
 const grid = document.getElementById('grid')!;
 const status = document.getElementById('status')!;

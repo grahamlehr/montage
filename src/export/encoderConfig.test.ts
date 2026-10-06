@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   baseEncoderConfig,
   chooseEncoderConfig,
+  encoderPathFor,
   EncoderUnsupportedError,
   frameCountFor,
   keyframeInterval,
+  preflightEncoder,
 } from './encoderConfig';
 import type { IsConfigSupported } from './encoderConfig';
 import { exportFileName } from './fileName';
@@ -59,4 +61,49 @@ describe('helpers', () => {
     expect(exportFileName({ width: 1080, height: 1920, totalDuration: 60 })).toBe(
       'montage-1080x1920-60s.mp4',
     ));
+});
+
+describe('encoderPath labelling', () => {
+  it('maps preferences honestly', () => {
+    expect(encoderPathFor('prefer-hardware', false)).toBe('hardware');
+    expect(encoderPathFor('prefer-software', true)).toBe('software');
+    expect(encoderPathFor('no-preference', true)).toBe('hardware');
+    expect(encoderPathFor('no-preference', false)).toBe('software');
+  });
+  it('labels no-preference by whether prefer-hardware was supported for the same config', async () => {
+    // prefer-hardware unsupported -> software
+    const a = await chooseEncoderConfig(base, supportOnly('no-preference'));
+    expect(a.encoderPath).toBe('software');
+    // prefer-hardware supported but skipped (failed at runtime) -> no-preference still labelled hardware
+    const b = await chooseEncoderConfig(base, supportOnly('prefer-hardware', 'no-preference'), [
+      'prefer-hardware',
+    ]);
+    expect(b.config.hardwareAcceleration).toBe('no-preference');
+    expect(b.encoderPath).toBe('hardware');
+    // skipped and unsupported -> software
+    const c = await chooseEncoderConfig(base, supportOnly('no-preference'), ['prefer-hardware']);
+    expect(c.encoderPath).toBe('software');
+  });
+});
+
+describe('preflightEncoder', () => {
+  const all: IsConfigSupported = async (c) => ({ supported: true, config: c });
+  it('accepts an encodable size', async () => {
+    expect(await preflightEncoder({ width: 4096, height: 2304, fps: 30, quality: 'high' }, all)).toMatchObject({ ok: true });
+  });
+  it('rejects over-cap sizes without asking the encoder', async () => {
+    let asked = 0;
+    const r = await preflightEncoder({ width: 4096, height: 4096, fps: 30, quality: 'high' }, async (c) => {
+      asked++;
+      return { supported: true, config: c };
+    });
+    expect(asked).toBe(0);
+    expect(r).toMatchObject({ ok: false });
+    expect(r.ok ? '' : r.message).toContain('9.4 MP');
+  });
+  it('rejects when no config is supported', async () => {
+    const r = await preflightEncoder({ width: 1080, height: 1920, fps: 30, quality: 'high' }, async () => ({ supported: false }));
+    expect(r.ok).toBe(false);
+    expect(r.ok ? '' : r.message).toContain('1080×1920');
+  });
 });

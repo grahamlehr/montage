@@ -8,6 +8,7 @@ import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useS
 import { CSS } from '@dnd-kit/utilities';
 import { useMontageStore } from './store';
 import type { PhotoItem } from './types';
+import { skippedFilesMessage } from './logic';
 import './ui.css';
 
 export interface PhotoTrayProps {
@@ -93,6 +94,7 @@ export function PhotoTray({ onFilesSelected }: PhotoTrayProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [announce, setAnnounce] = useState('');
+  const [skipped, setSkipped] = useState<string[]>([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -100,7 +102,10 @@ export function PhotoTray({ onFilesSelected }: PhotoTrayProps) {
   );
 
   const emit = (list: FileList | File[] | null) => {
-    const files = Array.from(list ?? []).filter(isImageFile);
+    const all = Array.from(list ?? []);
+    const files = all.filter(isImageFile);
+    const rejected = all.filter((f) => !isImageFile(f)).map((f) => f.name);
+    setSkipped(rejected);
     if (files.length) onFilesSelected(files);
   };
   const isFileDrag = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Files');
@@ -135,6 +140,14 @@ export function PhotoTray({ onFilesSelected }: PhotoTrayProps) {
           }}
         />
       </div>
+      {skipped.length > 0 && (
+        <div className="mt-skipped" role="status" data-testid="skipped-files">
+          <span>{skippedFilesMessage(skipped)}</span>
+          <button type="button" aria-label="Dismiss notice" title="Dismiss" data-testid="skipped-files-dismiss" onClick={() => setSkipped([])}>
+            ×
+          </button>
+        </div>
+      )}
       <div
         className="mt-drop"
         data-over={over}

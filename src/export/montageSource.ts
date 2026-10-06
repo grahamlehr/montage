@@ -18,7 +18,7 @@ export function createMontageSource(): FrameSource {
   let sizes: { width: number; height: number }[] = [];
   let out = { width: 0, height: 0 };
   let disposed = false;
-  let cursor = 0; // current segment index (monotonic during export)
+  let cursor = 0; // current segment index (monotonic except when an encoder retry restarts at frame 0)
   const entries = new Map<number, Promise<ImageBitmap | null>>();
 
   const load = (i: number): Promise<ImageBitmap | null> => {
@@ -64,14 +64,14 @@ export function createMontageSource(): FrameSource {
       let done = 0;
       onDecodeProgress(0, first);
       await Promise.all(
-        Array.from({ length: first }, (_, i) =>
-          load(i).then(() => onDecodeProgress(++done, first)),
-        ),
+        Array.from({ length: first }, (_, i) => load(i).then(() => onDecodeProgress(++done, first))),
       );
     },
     async draw(_frameIndex, t) {
       if (!renderer || !timeline) throw new Error('not initialised');
       const segs = timeline.segments;
+      // Going backwards (export retry restarts at frame 0): rewind; the residency window re-decodes as needed.
+      while (cursor > 0 && (segs[cursor]?.start ?? 0) > t) cursor--;
       while (cursor + 1 < segs.length && (segs[cursor + 1]?.start ?? Infinity) <= t) cursor++;
       // Window: previous (still visible in a transition), current, next (decoded ahead).
       const wanted = new Set([cursor - 1, cursor, cursor + 1].filter((i) => i >= 0 && i < segs.length));

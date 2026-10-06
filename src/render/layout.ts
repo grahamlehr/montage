@@ -57,6 +57,20 @@ export function placePhoto(
   };
 }
 
+/**
+ * Placement of the blurred backdrop (a frame-sized, cover-at-scale-1 image) for `blur` fit. It follows the
+ * layer's transform like a cover photo: zoom about `focus`, translate by tx/ty, clamped so it always covers
+ * the frame (never reveals the background colour).
+ */
+export function backdropPlacement(
+  frameW: number,
+  frameH: number,
+  focus: { x: number; y: number },
+  t: Transform,
+): Placement {
+  return placePhoto(frameW, frameH, frameW, frameH, 'cover', focus, t);
+}
+
 /** True if the placement covers the whole frame (used by tests). */
 export function coversFrame(p: Placement, frameW: number, frameH: number, eps = 1e-6): boolean {
   return (

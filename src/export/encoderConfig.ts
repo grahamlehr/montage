@@ -1,4 +1,4 @@
-import { KEYFRAME_INTERVAL_S } from '../lib/constants';
+import { KEYFRAME_INTERVAL_S, MAX_MACROBLOCKS, fitsEncoderArea } from '../lib/constants';
 import type { MontageSettings } from '../types';
 import { bitrateFor, pickAvcCodec } from './avc';
 
@@ -9,10 +9,20 @@ export type IsConfigSupported = (
 
 export const HARDWARE_PREFERENCES = ['prefer-hardware', 'no-preference', 'prefer-software'] as const;
 
+const CAP_MP = ((MAX_MACROBLOCKS * 256) / 1e6).toFixed(1);
+
+/** User-facing explanation for a size/frame rate Chrome's H.264 encoder cannot handle. */
+export function unsupportedSizeMessage(width: number, height: number, fps?: number): string {
+  if (!fitsEncoderArea(width, height)) {
+    return `${width}×${height} is too large: Chrome's H.264 encoder supports at most ${CAP_MP} MP (for example 4096×2304 or 3072×3072). Choose a smaller size.`;
+  }
+  return `Chrome can't encode H.264 at ${width}×${height}${fps ? ` and ${fps} fps` : ''}. Try a smaller size or a lower frame rate.`;
+}
+
 export class EncoderUnsupportedError extends Error {
   readonly codec: string;
-  constructor(codec: string) {
-    super(`This browser cannot encode H.264 (${codec}) at the requested size.`);
+  constructor(codec: string, width = 0, height = 0, fps?: number) {
+    super(width > 0 ? unsupportedSizeMessage(width, height, fps) : `This browser cannot encode H.264 (${codec}).`);
     this.name = 'EncoderUnsupportedError';
     this.codec = codec;
   }
@@ -34,15 +44,42 @@ export function baseEncoderConfig(
 }
 
 /**
+ * Honest encoderPath label. Chrome does not tell us which encoder it actually picked, so:
+ *  - 'prefer-hardware'  -> 'hardware' (the config was accepted with a hardware preference)
+ *  - 'prefer-software'  -> 'software'
+ *  - 'no-preference'    -> 'hardware' only if `prefer-hardware` isConfigSupported() was true for the same
+ *    config (Chrome then normally picks the hardware encoder), otherwise 'software'.
+ */
+export function encoderPathFor(
+  hw: VideoEncoderConfig['hardwareAcceleration'],
+  preferHardwareSupported: boolean,
+): EncoderPath {
+  if (hw === 'prefer-hardware') return 'hardware';
+  if (hw === 'no-preference') return preferHardwareSupported ? 'hardware' : 'software';
+  return 'software';
+}
+
+/**
  * Walks prefer-hardware -> no-preference -> prefer-software and returns the first config the browser
- * reports as supported. Only an accepted 'prefer-hardware' is reported as 'hardware'; the other two
- * preferences give no guarantee, so they are reported as 'software'.
+ * reports as supported (skipping preferences in `skip`, e.g. ones that already failed at runtime).
+ * See encoderPathFor for how the label is derived.
  */
 export async function chooseEncoderConfig(
   base: VideoEncoderConfig,
   isConfigSupported: IsConfigSupported,
   skip: ReadonlyArray<VideoEncoderConfig['hardwareAcceleration']> = [],
 ): Promise<{ config: VideoEncoderConfig; encoderPath: EncoderPath }> {
+  let hwSupported: boolean | undefined;
+  const probeHardware = async (): Promise<boolean> => {
+    if (hwSupported !== undefined) return hwSupported;
+    try {
+      hwSupported = !!(await isConfigSupported({ ...base, hardwareAcceleration: 'prefer-hardware' }))
+        .supported;
+    } catch {
+      hwSupported = false;
+    }
+    return hwSupported;
+  };
   for (const hw of HARDWARE_PREFERENCES) {
     if (skip.includes(hw)) continue;
     const candidate: VideoEncoderConfig = { ...base, hardwareAcceleration: hw };
@@ -50,16 +87,18 @@ export async function chooseEncoderConfig(
     try {
       res = await isConfigSupported(candidate);
     } catch {
+      if (hw === 'prefer-hardware') hwSupported = false;
       continue;
     }
+    if (hw === 'prefer-hardware') hwSupported = !!res.supported;
     if (res.supported) {
       return {
         config: { ...candidate, ...(res.config ?? {}), hardwareAcceleration: hw },
-        encoderPath: hw === 'prefer-hardware' ? 'hardware' : 'software',
+        encoderPath: encoderPathFor(hw, hw === 'no-preference' ? await probeHardware() : false),
       };
     }
   }
-  throw new EncoderUnsupportedError(base.codec ?? 'avc1');
+  throw new EncoderUnsupportedError(base.codec ?? 'avc1', base.width, base.height, base.framerate);
 }
 
 export function keyframeInterval(fps: number): number {
@@ -68,4 +107,25 @@ export function keyframeInterval(fps: number): number {
 
 export function frameCountFor(totalDuration: number, fps: number): number {
   return Math.round(totalDuration * fps);
+}
+
+export type PreflightResult = { ok: true; encoderPath: EncoderPath } | { ok: false; message: string };
+
+/**
+ * Main-thread check run before starting the export worker: does the size fit the encoder area cap and does
+ * VideoEncoder.isConfigSupported accept some config? Never throws.
+ */
+export async function preflightEncoder(
+  s: Pick<MontageSettings, 'width' | 'height' | 'fps' | 'quality'>,
+  isConfigSupported: IsConfigSupported = (c) => VideoEncoder.isConfigSupported(c),
+): Promise<PreflightResult> {
+  if (!fitsEncoderArea(s.width, s.height)) {
+    return { ok: false, message: unsupportedSizeMessage(s.width, s.height, s.fps) };
+  }
+  try {
+    const { encoderPath } = await chooseEncoderConfig(baseEncoderConfig(s), isConfigSupported);
+    return { ok: true, encoderPath };
+  } catch {
+    return { ok: false, message: unsupportedSizeMessage(s.width, s.height, s.fps) };
+  }
 }
