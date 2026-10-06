@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>UI harness</title>
+    <style>
+      body { margin: 0; background: #0e0f13; color: #e7e9ee; font: 13px system-ui, sans-serif; }
+      #root { display: grid; grid-template-columns: 340px 1fr 360px; gap: 12px; padding: 12px; align-items: start; }
+      pre { background: #1c1e25; border: 1px solid #343844; border-radius: 8px; padding: 10px; overflow: auto; max-height: 90vh; font-size: 11px; margin: 0; }
+      .col { display: flex; flex-direction: column; gap: 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./ui.tsx"></script>
+  </body>
+</html>
