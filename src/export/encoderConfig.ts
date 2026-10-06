@@ -34,15 +34,42 @@ export function baseEncoderConfig(
 }
 
 /**
+ * Honest encoderPath label. Chrome does not tell us which encoder it actually picked, so:
+ *  - 'prefer-hardware'  -> 'hardware' (the config was accepted with a hardware preference)
+ *  - 'prefer-software'  -> 'software'
+ *  - 'no-preference'    -> 'hardware' only if `prefer-hardware` isConfigSupported() was true for the same
+ *    config (Chrome then normally picks the hardware encoder), otherwise 'software'.
+ */
+export function encoderPathFor(
+  hw: VideoEncoderConfig['hardwareAcceleration'],
+  preferHardwareSupported: boolean,
+): EncoderPath {
+  if (hw === 'prefer-hardware') return 'hardware';
+  if (hw === 'no-preference') return preferHardwareSupported ? 'hardware' : 'software';
+  return 'software';
+}
+
+/**
  * Walks prefer-hardware -> no-preference -> prefer-software and returns the first config the browser
- * reports as supported. Only an accepted 'prefer-hardware' is reported as 'hardware'; the other two
- * preferences give no guarantee, so they are reported as 'software'.
+ * reports as supported (skipping preferences in `skip`, e.g. ones that already failed at runtime).
+ * See encoderPathFor for how the label is derived.
  */
 export async function chooseEncoderConfig(
   base: VideoEncoderConfig,
   isConfigSupported: IsConfigSupported,
   skip: ReadonlyArray<VideoEncoderConfig['hardwareAcceleration']> = [],
 ): Promise<{ config: VideoEncoderConfig; encoderPath: EncoderPath }> {
+  let hwSupported: boolean | undefined;
+  const probeHardware = async (): Promise<boolean> => {
+    if (hwSupported !== undefined) return hwSupported;
+    try {
+      hwSupported = !!(await isConfigSupported({ ...base, hardwareAcceleration: 'prefer-hardware' }))
+        .supported;
+    } catch {
+      hwSupported = false;
+    }
+    return hwSupported;
+  };
   for (const hw of HARDWARE_PREFERENCES) {
     if (skip.includes(hw)) continue;
     const candidate: VideoEncoderConfig = { ...base, hardwareAcceleration: hw };
@@ -50,12 +77,14 @@ export async function chooseEncoderConfig(
     try {
       res = await isConfigSupported(candidate);
     } catch {
+      if (hw === 'prefer-hardware') hwSupported = false;
       continue;
     }
+    if (hw === 'prefer-hardware') hwSupported = !!res.supported;
     if (res.supported) {
       return {
         config: { ...candidate, ...(res.config ?? {}), hardwareAcceleration: hw },
-        encoderPath: hw === 'prefer-hardware' ? 'hardware' : 'software',
+        encoderPath: encoderPathFor(hw, hw === 'no-preference' ? await probeHardware() : false),
       };
     }
   }

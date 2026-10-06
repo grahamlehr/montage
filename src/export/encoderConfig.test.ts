@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   baseEncoderConfig,
   chooseEncoderConfig,
+  encoderPathFor,
   EncoderUnsupportedError,
   frameCountFor,
   keyframeInterval,
@@ -59,4 +60,27 @@ describe('helpers', () => {
     expect(exportFileName({ width: 1080, height: 1920, totalDuration: 60 })).toBe(
       'montage-1080x1920-60s.mp4',
     ));
+});
+
+describe('encoderPath labelling', () => {
+  it('maps preferences honestly', () => {
+    expect(encoderPathFor('prefer-hardware', false)).toBe('hardware');
+    expect(encoderPathFor('prefer-software', true)).toBe('software');
+    expect(encoderPathFor('no-preference', true)).toBe('hardware');
+    expect(encoderPathFor('no-preference', false)).toBe('software');
+  });
+  it('labels no-preference by whether prefer-hardware was supported for the same config', async () => {
+    // prefer-hardware unsupported -> software
+    const a = await chooseEncoderConfig(base, supportOnly('no-preference'));
+    expect(a.encoderPath).toBe('software');
+    // prefer-hardware supported but skipped (failed at runtime) -> no-preference still labelled hardware
+    const b = await chooseEncoderConfig(base, supportOnly('prefer-hardware', 'no-preference'), [
+      'prefer-hardware',
+    ]);
+    expect(b.config.hardwareAcceleration).toBe('no-preference');
+    expect(b.encoderPath).toBe('hardware');
+    // skipped and unsupported -> software
+    const c = await chooseEncoderConfig(base, supportOnly('no-preference'), ['prefer-hardware']);
+    expect(c.encoderPath).toBe('software');
+  });
 });

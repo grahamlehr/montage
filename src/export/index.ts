@@ -6,3 +6,5 @@ export type { ExportHandle } from './client';
 export type { FrameSource, FrameSourceFactory } from './frameSource';
 export { createExportWorkerHandler } from './worker';
 export { runExport, CancelledError } from './pipeline';
+export type { PipelineDeps, VideoEncoderLike, MuxerLike } from './pipeline';
+export { encoderPathFor } from './encoderConfig';
