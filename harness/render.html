@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Renderer harness</title>
+    <style>
+      body {
+        font: 12px system-ui;
+        background: #222;
+        color: #ddd;
+        margin: 8px;
+      }
+      #grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      figure {
+        margin: 0;
+      }
+      canvas {
+        display: block;
+        max-height: 360px;
+        max-width: 360px;
+        border: 1px solid #555;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="status">running…</div>
+    <div id="grid"></div>
+    <script type="module" src="./render.ts"></script>
+  </body>
+</html>
