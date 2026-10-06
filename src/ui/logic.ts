@@ -200,3 +200,12 @@ export function formatBytes(bytes: number): string {
 }
 
 export const formatSeconds = (s: number) => `${s.toFixed(1)} s`;
+
+/** Notice text for files the tray refused (not images). Lists up to 3 names. */
+export function skippedFilesMessage(names: readonly string[]): string {
+  const n = names.length;
+  if (n === 0) return '';
+  const shown = names.slice(0, 3).join(', ');
+  const more = n > 3 ? ` and ${n - 3} more` : '';
+  return `Skipped ${n} ${n === 1 ? 'file that isn’t a supported image' : 'files that aren’t supported images'}: ${shown}${more}`;
+}

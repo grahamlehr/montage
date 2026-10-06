@@ -102,3 +102,14 @@ describe('estimates', () => {
     expect(formatBytes(5 * 1024 * 1024)).toBe('5.0 MB');
   });
 });
+
+import { skippedFilesMessage } from './logic';
+
+describe('skippedFilesMessage', () => {
+  it('formats singular, plural and overflow', () => {
+    expect(skippedFilesMessage([])).toBe('');
+    expect(skippedFilesMessage(['a.txt'])).toBe('Skipped 1 file that isn’t a supported image: a.txt');
+    expect(skippedFilesMessage(['a', 'b'])).toBe('Skipped 2 files that aren’t supported images: a, b');
+    expect(skippedFilesMessage(['a', 'b', 'c', 'd', 'e'])).toBe('Skipped 5 files that aren’t supported images: a, b, c and 2 more');
+  });
+});
