@@ -1,6 +1,5 @@
-import { createTestPatternSource } from './testPatternSource';
+import { createMontageSource } from './montageSource';
 import { createExportWorkerHandler } from './worker';
 import type { WorkerScopeLike } from './worker';
 
-// TODO(T7): montage source (ingest -> engine -> render) replaces the test pattern.
-createExportWorkerHandler(createTestPatternSource, self as unknown as WorkerScopeLike);
+createExportWorkerHandler(createMontageSource, self as unknown as WorkerScopeLike);
