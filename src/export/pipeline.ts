@@ -1,7 +1,8 @@
 import { BufferTarget, EncodedPacket, EncodedVideoPacketSource, Mp4OutputFormat, Output } from 'mediabunny';
 import type { ExportMessage, ExportRequest } from '../types';
 import { baseEncoderConfig, chooseEncoderConfig, frameCountFor, keyframeInterval } from './encoderConfig';
-import { EncoderUnsupportedError } from './encoderConfig';
+import { EncoderUnsupportedError, unsupportedSizeMessage } from './encoderConfig';
+import { fitsEncoderArea } from '../lib/constants';
 import type { IsConfigSupported } from './encoderConfig';
 import type { FrameSource } from './frameSource';
 
@@ -151,6 +152,9 @@ async function run(
   const check = () => {
     if (isCancelled()) throw new CancelledError();
   };
+
+  // Backstop for the UI pre-flight: fail before decoding anything when the size can never be encoded.
+  if (!fitsEncoderArea(width, height)) throw new Error(unsupportedSizeMessage(width, height, fps));
 
   let sourceInitialised = false;
   let lastPost = -Infinity;

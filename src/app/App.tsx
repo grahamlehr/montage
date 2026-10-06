@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildTimeline, timingSummary } from '../engine';
+import { fitsEncoderArea } from '../lib/constants';
+import { preflightEncoder, unsupportedSizeMessage } from '../export';
 import { PerPhotoInspector, PhotoTray, SettingsPanel, useMontageStore } from '../ui';
 import type { ExportRequest, Timeline } from '../types';
 import { ExportBar } from './ExportBar';
@@ -51,8 +53,28 @@ export function App() {
     };
   }, []);
 
+  // Pre-flight: can Chrome's H.264 encoder take this size/fps? Checked on the main thread before any worker starts.
+  const { width, height, fps, quality } = settings;
+  const [encoderCheck, setEncoderCheck] = useState<{ key: string; message: string | null } | null>(null);
+  const checkKey = `${width}x${height}@${fps}/${quality}`;
+  useEffect(() => {
+    let stale = false;
+    void preflightEncoder({ width, height, fps, quality }).then((r) => {
+      if (!stale) setEncoderCheck({ key: checkKey, message: r.ok ? null : r.message });
+    });
+    return () => {
+      stale = true;
+    };
+  }, [width, height, fps, quality, checkKey]);
+  const blockedReason = !fitsEncoderArea(width, height)
+    ? unsupportedSizeMessage(width, height, fps)
+    : encoderCheck?.key === checkKey
+      ? encoderCheck.message
+      : null;
+  const checking = !blockedReason && encoderCheck?.key !== checkKey;
+
   const exporting = exportState === 'running';
-  const canExport = !!timeline && !loading && !exporting;
+  const canExport = !!timeline && !loading && !exporting && !blockedReason && !checking;
 
   const getRequest = useCallback((): ExportRequest | null => {
     if (!timeline) return null;
@@ -88,7 +110,12 @@ export function App() {
               {validationError}
             </div>
           )}
-          <ExportBar getRequest={getRequest} canExport={canExport} onStateChange={setExportState} />
+          <ExportBar
+            getRequest={getRequest}
+            canExport={canExport}
+            blockedReason={blockedReason}
+            onStateChange={setExportState}
+          />
         </div>
         <div className="app-right">
           <SettingsPanel timing={timing} validationError={validationError} />

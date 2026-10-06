@@ -8,5 +8,5 @@ export type { MontageState } from './store';
 export type { PhotoItem, DimensionPreset } from './types';
 export type { TimingEstimate } from './logic';
 export {
-  DIMENSION_PRESETS, applySettingsPatch, estimateTiming, formatBytes, parseRatio, shuffleItems, arrayMove,
+  DIMENSION_PRESETS, applySettingsPatch, applySettingsPatchDetailed, lockedDims, dimsForRatio, maxEvenWidthFor, estimateTiming, formatBytes, parseRatio, shuffleItems, arrayMove,
 } from './logic';

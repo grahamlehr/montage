@@ -6,6 +6,7 @@ import {
   EncoderUnsupportedError,
   frameCountFor,
   keyframeInterval,
+  preflightEncoder,
 } from './encoderConfig';
 import type { IsConfigSupported } from './encoderConfig';
 import { exportFileName } from './fileName';
@@ -82,5 +83,27 @@ describe('encoderPath labelling', () => {
     // skipped and unsupported -> software
     const c = await chooseEncoderConfig(base, supportOnly('no-preference'), ['prefer-hardware']);
     expect(c.encoderPath).toBe('software');
+  });
+});
+
+describe('preflightEncoder', () => {
+  const all: IsConfigSupported = async (c) => ({ supported: true, config: c });
+  it('accepts an encodable size', async () => {
+    expect(await preflightEncoder({ width: 4096, height: 2304, fps: 30, quality: 'high' }, all)).toMatchObject({ ok: true });
+  });
+  it('rejects over-cap sizes without asking the encoder', async () => {
+    let asked = 0;
+    const r = await preflightEncoder({ width: 4096, height: 4096, fps: 30, quality: 'high' }, async (c) => {
+      asked++;
+      return { supported: true, config: c };
+    });
+    expect(asked).toBe(0);
+    expect(r).toMatchObject({ ok: false });
+    expect(r.ok ? '' : r.message).toContain('9.4 MP');
+  });
+  it('rejects when no config is supported', async () => {
+    const r = await preflightEncoder({ width: 1080, height: 1920, fps: 30, quality: 'high' }, async () => ({ supported: false }));
+    expect(r.ok).toBe(false);
+    expect(r.ok ? '' : r.message).toContain('1080×1920');
   });
 });

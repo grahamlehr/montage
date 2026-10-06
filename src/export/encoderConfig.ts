@@ -1,4 +1,4 @@
-import { KEYFRAME_INTERVAL_S } from '../lib/constants';
+import { KEYFRAME_INTERVAL_S, MAX_MACROBLOCKS, fitsEncoderArea } from '../lib/constants';
 import type { MontageSettings } from '../types';
 import { bitrateFor, pickAvcCodec } from './avc';
 
@@ -9,10 +9,20 @@ export type IsConfigSupported = (
 
 export const HARDWARE_PREFERENCES = ['prefer-hardware', 'no-preference', 'prefer-software'] as const;
 
+const CAP_MP = ((MAX_MACROBLOCKS * 256) / 1e6).toFixed(1);
+
+/** User-facing explanation for a size/frame rate Chrome's H.264 encoder cannot handle. */
+export function unsupportedSizeMessage(width: number, height: number, fps?: number): string {
+  if (!fitsEncoderArea(width, height)) {
+    return `${width}×${height} is too large: Chrome's H.264 encoder supports at most ${CAP_MP} MP (for example 4096×2304 or 3072×3072). Choose a smaller size.`;
+  }
+  return `Chrome can't encode H.264 at ${width}×${height}${fps ? ` and ${fps} fps` : ''}. Try a smaller size or a lower frame rate.`;
+}
+
 export class EncoderUnsupportedError extends Error {
   readonly codec: string;
-  constructor(codec: string) {
-    super(`This browser cannot encode H.264 (${codec}) at the requested size.`);
+  constructor(codec: string, width = 0, height = 0, fps?: number) {
+    super(width > 0 ? unsupportedSizeMessage(width, height, fps) : `This browser cannot encode H.264 (${codec}).`);
     this.name = 'EncoderUnsupportedError';
     this.codec = codec;
   }
@@ -88,7 +98,7 @@ export async function chooseEncoderConfig(
       };
     }
   }
-  throw new EncoderUnsupportedError(base.codec ?? 'avc1');
+  throw new EncoderUnsupportedError(base.codec ?? 'avc1', base.width, base.height, base.framerate);
 }
 
 export function keyframeInterval(fps: number): number {
@@ -97,4 +107,25 @@ export function keyframeInterval(fps: number): number {
 
 export function frameCountFor(totalDuration: number, fps: number): number {
   return Math.round(totalDuration * fps);
+}
+
+export type PreflightResult = { ok: true; encoderPath: EncoderPath } | { ok: false; message: string };
+
+/**
+ * Main-thread check run before starting the export worker: does the size fit the encoder area cap and does
+ * VideoEncoder.isConfigSupported accept some config? Never throws.
+ */
+export async function preflightEncoder(
+  s: Pick<MontageSettings, 'width' | 'height' | 'fps' | 'quality'>,
+  isConfigSupported: IsConfigSupported = (c) => VideoEncoder.isConfigSupported(c),
+): Promise<PreflightResult> {
+  if (!fitsEncoderArea(s.width, s.height)) {
+    return { ok: false, message: unsupportedSizeMessage(s.width, s.height, s.fps) };
+  }
+  try {
+    const { encoderPath } = await chooseEncoderConfig(baseEncoderConfig(s), isConfigSupported);
+    return { ok: true, encoderPath };
+  } catch {
+    return { ok: false, message: unsupportedSizeMessage(s.width, s.height, s.fps) };
+  }
 }

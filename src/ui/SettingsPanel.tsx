@@ -88,6 +88,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 export function SettingsPanel({ timing, validationError }: SettingsPanelProps = {}) {
   const s = useMontageStore((st) => st.settings);
   const aspectLocked = useMontageStore((st) => st.aspectLocked);
+  const areaNote = useMontageStore((st) => st.areaNote);
   const photoCount = useMontageStore((st) => st.photos.length);
   const setSettings = useMontageStore((st) => st.setSettings);
   const setAspectLocked = useMontageStore((st) => st.setAspectLocked);
@@ -121,7 +122,7 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
         </div>
       </Group>
       <div className="mt-field">
-        <span className="mt-label">Size (px, even, 128–4096)</span>
+        <span className="mt-label">Size (px, even, 128–4096, ≤ 9.4 MP)</span>
         <div className="mt-dims">
           <NumberField id="set-width" label="Width" value={s.width} min={128} max={4096} step={2} onCommit={(v) => setSettings({ width: v })} />
           <span aria-hidden="true">×</span>
@@ -131,6 +132,9 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
             onClick={() => setAspectLocked(!aspectLocked)}>{aspectLocked ? '🔒' : '🔓'}</button>
           <RatioField />
         </div>
+        {areaNote && (
+          <div className="mt-muted" data-testid="area-cap-note" role="status">{areaNote}</div>
+        )}
       </div>
 
       <h3>Timing</h3>

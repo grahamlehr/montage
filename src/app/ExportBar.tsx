@@ -13,6 +13,8 @@ export interface ExportBarProps {
   /** Builds the request, or null when export isn't possible. Called when Export is clicked. */
   getRequest(): ExportRequest | null;
   canExport: boolean;
+  /** Why export is impossible for the current settings (e.g. unsupported size); shown next to the button. */
+  blockedReason?: string | null;
   onStateChange(state: ExportState): void;
 }
 
@@ -27,7 +29,7 @@ function formatEta(s: number): string {
   return r >= 60 ? `${Math.floor(r / 60)}m ${r % 60}s` : `${r}s`;
 }
 
-export function ExportBar({ getRequest, canExport, onStateChange }: ExportBarProps) {
+export function ExportBar({ getRequest, canExport, blockedReason, onStateChange }: ExportBarProps) {
   const [state, setState] = useState<ExportState>('idle');
   const [progress, setProgress] = useState<Progress | null>(null);
   const [result, setResult] = useState<Done | null>(null);
@@ -48,7 +50,7 @@ export function ExportBar({ getRequest, canExport, onStateChange }: ExportBarPro
 
   const run = () => {
     const request = getRequest();
-    if (!request || state === 'running') return;
+    if (!request || state === 'running' || blockedReason) return;
     setProgress(null);
     setResult(null);
     setError(null);
@@ -95,6 +97,11 @@ export function ExportBar({ getRequest, canExport, onStateChange }: ExportBarPro
       >
         Export MP4
       </button>
+      {blockedReason && (
+        <span data-testid="export-blocked" role="alert" className="app-status">
+          {blockedReason}
+        </span>
+      )}
       {state === 'running' && (
         <button
           type="button"

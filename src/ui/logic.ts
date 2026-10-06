@@ -1,4 +1,7 @@
-import { DIM_MAX, DIM_MIN, DURATION_MAX, DURATION_MIN, TRANSITION_FAST, TRANSITION_SLOW, clampEvenDim } from '../lib/constants';
+import {
+  DIM_MAX, DIM_MIN, DURATION_MAX, DURATION_MIN, MAX_MACROBLOCKS, TRANSITION_FAST, TRANSITION_SLOW, clampEvenDim,
+  fitsEncoderArea, macroblocks, maxEvenHeightFor,
+} from '../lib/constants';
 import { mulberry32, shuffle } from '../lib/rng';
 import type { FitMode, MontageSettings, MotionStyle, PhotoOverrides, TransitionStyle } from '../types';
 import type { DimensionPreset } from './types';
@@ -65,8 +68,45 @@ export function formatRatio(width: number, height: number): string {
   return `${w}:${h}`;
 }
 
-/** Dimensions after changing one side while keeping aspect `ratio` (= width / height). */
-export function lockedDims(
+/** Largest even width (>= DIM_MIN) that fits the macroblock cap for a given height (symmetric to maxEvenHeightFor). */
+export function maxEvenWidthFor(height: number, width = DIM_MAX): number {
+  return maxEvenHeightFor(height, width);
+}
+
+export type AreaClamp = 'none' | 'width' | 'height' | 'both';
+
+/** Human text for the area-cap note (the "9.4 MP" figure is MAX_MACROBLOCKS * 256 px). */
+export const AREA_CAP_LABEL = `${((MAX_MACROBLOCKS * 256) / 1e6).toFixed(1)} MP`;
+
+export function areaNoteText(clamp: AreaClamp, width: number, height: number): string {
+  const head = `Max ${AREA_CAP_LABEL} for H.264 in Chrome`;
+  if (clamp === 'height') return `${head} — height limited to ${height}`;
+  if (clamp === 'width') return `${head} — width limited to ${width}`;
+  if (clamp === 'both') return `${head} — size reduced to ${width}×${height}`;
+  return `${head} — this size is at the limit`;
+}
+
+/** Note to show for a settled size: null unless the size sits exactly at the cap. */
+export function atCapNote(width: number, height: number): string | null {
+  return macroblocks(width, height) >= MAX_MACROBLOCKS ? areaNoteText('none', width, height) : null;
+}
+
+/** Aspect-locked: shrink the pair (keeping the edited side as large as possible) until it fits the area cap. */
+function shrinkLocked(
+  changed: 'width' | 'height',
+  edited: number,
+  ratio: number,
+): { width: number; height: number } {
+  for (let v = edited; v >= DIM_MIN; v -= 2) {
+    const other = clampEvenDim(changed === 'width' ? v / ratio : v * ratio);
+    const dims = changed === 'width' ? { width: v, height: other } : { width: other, height: v };
+    if (fitsEncoderArea(dims.width, dims.height)) return dims;
+  }
+  return { width: DIM_MIN, height: DIM_MIN };
+}
+
+/** Dimensions after changing one side while keeping aspect `ratio` (= width / height), before the area cap. */
+function lockedDimsUncapped(
   changed: 'width' | 'height',
   value: number,
   ratio: number,
@@ -83,10 +123,50 @@ export function lockedDims(
   return changed === 'width' ? { width: back, height: o } : { width: o, height: back };
 }
 
-/** Fit a ratio rw:rh by keeping the width (adjusting it only if the height would be out of range). */
+/** Like lockedDims, also reporting whether the area cap shrank the result. */
+export function lockedDimsCapped(
+  changed: 'width' | 'height',
+  value: number,
+  ratio: number,
+): { width: number; height: number; clamped: boolean } {
+  const raw = lockedDimsUncapped(changed, value, ratio);
+  if (fitsEncoderArea(raw.width, raw.height)) return { ...raw, clamped: false };
+  return { ...shrinkLocked(changed, changed === 'width' ? raw.width : raw.height, ratio), clamped: true };
+}
+
+/** Dimensions after changing one side while keeping aspect `ratio` (= width / height); satisfies the area cap. */
+export function lockedDims(
+  changed: 'width' | 'height',
+  value: number,
+  ratio: number,
+): { width: number; height: number } {
+  const { width, height } = lockedDimsCapped(changed, value, ratio);
+  return { width, height };
+}
+
+/** Fit a ratio rw:rh by keeping the width (adjusting it only if the height would be out of range or too big). */
 export function dimsForRatio(width: number, rw: number, rh: number): { width: number; height: number } {
-  const ratio = rw / rh;
-  return lockedDims('width', width, ratio);
+  return lockedDims('width', width, rw / rh);
+}
+
+export function dimsForRatioCapped(
+  width: number,
+  rw: number,
+  rh: number,
+): { width: number; height: number; clamped: boolean } {
+  return lockedDimsCapped('width', width, rw / rh);
+}
+
+/** Unlocked: keep the edited side, clamp the other to the area cap. */
+export function capKeeping(
+  keep: 'width' | 'height',
+  width: number,
+  height: number,
+): { width: number; height: number; clamped: boolean } {
+  if (fitsEncoderArea(width, height)) return { width, height, clamped: false };
+  return keep === 'width'
+    ? { width, height: maxEvenHeightFor(width, height), clamped: true }
+    : { width: maxEvenWidthFor(height, width), height, clamped: true };
 }
 
 function isHexColour(s: string): boolean {
@@ -99,20 +179,41 @@ export function applySettingsPatch(
   patch: Partial<MontageSettings>,
   aspectLocked: boolean,
 ): MontageSettings {
+  return applySettingsPatchDetailed(prev, patch, aspectLocked).settings;
+}
+
+/** applySettingsPatch plus which dimension (if any) the encoder area cap forced down. */
+export function applySettingsPatchDetailed(
+  prev: MontageSettings,
+  patch: Partial<MontageSettings>,
+  aspectLocked: boolean,
+): { settings: MontageSettings; areaClamp: AreaClamp } {
   const next: MontageSettings = { ...prev };
   const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+  let areaClamp: AreaClamp = 'none';
 
   const hasW = finite(patch.width);
   const hasH = finite(patch.height);
   if (hasW && hasH) {
-    next.width = clampEvenDim(patch.width as number);
-    next.height = clampEvenDim(patch.height as number);
-  } else if (hasW) {
-    if (aspectLocked) Object.assign(next, lockedDims('width', patch.width as number, prev.width / prev.height));
-    else next.width = clampEvenDim(patch.width as number);
-  } else if (hasH) {
-    if (aspectLocked) Object.assign(next, lockedDims('height', patch.height as number, prev.width / prev.height));
-    else next.height = clampEvenDim(patch.height as number);
+    const r = capKeeping('width', clampEvenDim(patch.width as number), clampEvenDim(patch.height as number));
+    next.width = r.width;
+    next.height = r.height;
+    if (r.clamped) areaClamp = 'height';
+  } else if (hasW || hasH) {
+    const changed = hasW ? 'width' : 'height';
+    const value = (hasW ? patch.width : patch.height) as number;
+    if (aspectLocked) {
+      const r = lockedDimsCapped(changed, value, prev.width / prev.height);
+      next.width = r.width;
+      next.height = r.height;
+      if (r.clamped) areaClamp = 'both';
+    } else {
+      const v = clampEvenDim(value);
+      const r = capKeeping(changed, hasW ? v : prev.width, hasH ? v : prev.height);
+      next.width = r.width;
+      next.height = r.height;
+      if (r.clamped) areaClamp = changed === 'width' ? 'height' : 'width';
+    }
   }
 
   if (patch.fps !== undefined && (FPS_OPTIONS as readonly number[]).includes(patch.fps)) next.fps = patch.fps;
@@ -133,7 +234,7 @@ export function applySettingsPatch(
   if (patch.fit && FIT_MODES.includes(patch.fit)) next.fit = patch.fit;
   if (typeof patch.background === 'string' && isHexColour(patch.background)) next.background = patch.background.toLowerCase();
   if (patch.quality && (QUALITIES as readonly string[]).includes(patch.quality)) next.quality = patch.quality;
-  return next;
+  return { settings: next, areaClamp };
 }
 
 /** Toggle a style in a pool; refuses to remove the last entry. */

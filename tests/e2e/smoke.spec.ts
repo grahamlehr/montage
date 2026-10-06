@@ -45,14 +45,13 @@ test('loads, ingests mixed fixtures, rejects non-images, previews and scrubs', a
   await expect(page.locator('li.mt-tile .mt-tile-status')).toHaveCount(0);
   await expect(page.locator('li.mt-tile img')).toHaveCount(good.length);
 
-  // A non-image must not break the app (rejected outright or shown as an error tile).
+  // A non-image is refused with a visible notice; a corrupt .jpg becomes an error tile. Neither breaks the app.
   await page.getByTestId('file-input').setInputFiles([fixture('not-an-image.txt'), fixture('fake.jpg')]);
-  await page.waitForTimeout(1500);
-  const n = await tiles(page).count();
-  expect(n).toBeGreaterThanOrEqual(good.length);
-  expect(n).toBeLessThanOrEqual(good.length + 2);
-  if (n > good.length)
-    await expect(page.locator('li.mt-tile .mt-tile-status[role=alert]').first()).toBeVisible();
+  const skipped = page.getByTestId('skipped-files');
+  await expect(skipped).toBeVisible();
+  await expect(skipped).toContainText('not-an-image.txt');
+  await expect(tiles(page)).toHaveCount(good.length + 1);
+  await expect(page.locator('li.mt-tile .mt-tile-status[role=alert]').first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('preview-canvas')).toBeVisible();
 
   // Preview renders non-black pixels.

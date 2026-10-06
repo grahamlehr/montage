@@ -1,5 +1,5 @@
 export { AvcLevelError, bitrateFor, pickAvcCodec } from './avc';
-export { chooseEncoderConfig, baseEncoderConfig, EncoderUnsupportedError } from './encoderConfig';
+export { chooseEncoderConfig, baseEncoderConfig, EncoderUnsupportedError, preflightEncoder, unsupportedSizeMessage } from './encoderConfig';
 export { exportFileName } from './fileName';
 export { downloadBlob, startExport } from './client';
 export type { ExportHandle } from './client';
@@ -8,3 +8,4 @@ export { createExportWorkerHandler } from './worker';
 export { runExport, CancelledError } from './pipeline';
 export type { PipelineDeps, VideoEncoderLike, MuxerLike } from './pipeline';
 export { encoderPathFor } from './encoderConfig';
+export type { PreflightResult } from './encoderConfig';
