@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install ffmpeg (ffprobe) and image tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick libheif-examples
+      - name: Check Google Chrome
+        run: google-chrome --version
+      - name: Run e2e (headed under xvfb, installed Chrome)
+        run: |
+          if ls tests/e2e/*.spec.ts >/dev/null 2>&1; then
+            xvfb-run --auto-servernum -- npm run test:e2e
+          else
+            echo "No e2e specs yet"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-artifacts
+          path: |
+            playwright-report/
+            test-results/
+            tmp/**/*.mp4
+          if-no-files-found: ignore

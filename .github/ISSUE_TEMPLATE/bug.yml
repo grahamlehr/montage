@@ -1,0 +1,30 @@
+name: Bug
+description: Something is broken
+labels: [bug]
+body:
+  - type: textarea
+    id: repro
+    attributes: { label: Steps to reproduce }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Expected }
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes: { label: Actual }
+    validations: { required: true }
+  - type: input
+    id: settings
+    attributes:
+      label: Output settings
+      description: dims / fps / length / photo count
+      placeholder: 1080×1920, 30 fps, 60 s, 50 photos
+  - type: input
+    id: chrome
+    attributes: { label: Chrome version }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: ffprobe output, frame grabs, console errors
