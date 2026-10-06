@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blurSize, coversFrame, parseHex, placePhoto } from './layout';
+import { backdropPlacement, blurSize, coversFrame, parseHex, placePhoto } from './layout';
 
 const sizes: [number, number][] = [
   [1080, 1920],
@@ -72,5 +72,27 @@ describe('helpers', () => {
   it('blurSize is reduced', () => {
     expect(blurSize(1080, 1920)).toEqual({ w: 270, h: 480 });
     expect(blurSize(128, 128).w).toBeGreaterThanOrEqual(16);
+  });
+});
+
+describe('backdropPlacement (blur fit)', () => {
+  it('always covers the frame for scale 1..1.3, |tx|,|ty| <= 0.12, any focus', () => {
+    for (const [W, H] of sizes)
+      for (const scale of [1, 1.15, 1.3])
+        for (const fx of [0, 0.3, 0.5, 1])
+          for (const fy of [0, 0.7, 1])
+            for (const tx of [-0.12, 0, 0.12])
+              for (const ty of [-0.12, 0, 0.12]) {
+                const p = backdropPlacement(W, H, { x: fx, y: fy }, { scale, tx, ty });
+                expect(coversFrame(p, W, H)).toBe(true);
+              }
+  });
+  it('is the identity at scale 1 / no translation and moves with tx when zoomed', () => {
+    const id = backdropPlacement(1080, 1920, { x: 0.5, y: 0.5 }, { scale: 1, tx: 0, ty: 0 });
+    expect(id).toEqual({ cx: 540, cy: 960, w: 1080, h: 1920 });
+    const a = backdropPlacement(1080, 1920, { x: 0.5, y: 0.5 }, { scale: 1.3, tx: 0, ty: 0 });
+    const b = backdropPlacement(1080, 1920, { x: 0.5, y: 0.5 }, { scale: 1.3, tx: 0.1, ty: 0 });
+    expect(b.cx).toBeGreaterThan(a.cx);
+    expect(b.w).toBeCloseTo(1080 * 1.3);
   });
 });
