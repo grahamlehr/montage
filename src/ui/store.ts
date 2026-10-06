@@ -14,6 +14,8 @@ export interface MontageState {
   settings: MontageSettings;
   selectedId: string | null;
   aspectLocked: boolean;
+  /** Exact ratio captured when the lock was turned on / a ratio or preset was applied while locked; null when unlocked. */
+  lockedRatio: { w: number; h: number } | null;
   /** Inline note about the encoder area cap (clamp just happened, or the size sits at the cap); null otherwise. */
   areaNote: string | null;
 
@@ -56,6 +58,7 @@ export const useMontageStore = create<MontageState>()((set, get) => ({
   settings: { ...DEFAULT_SETTINGS, width: 1080, height: 1920 },
   selectedId: null,
   aspectLocked: false,
+  lockedRatio: null,
   areaNote: null,
 
   addPhotos: (items) => set((s) => ({ photos: [...s.photos, ...items.filter((i) => !s.photos.some((p) => p.source.id === i.source.id))] })),
@@ -83,23 +86,33 @@ export const useMontageStore = create<MontageState>()((set, get) => ({
   shufflePhotos: (seed) => set((s) => ({ photos: shuffleItems(s.photos, seed ?? newSeed()) })),
   setSettings: (partial) =>
     set((s) => {
-      const { settings, areaClamp } = applySettingsPatchDetailed(s.settings, partial, s.aspectLocked);
-      return withNote(s, settings, areaClamp, 'width' in partial || 'height' in partial);
+      const ratio = s.aspectLocked && s.lockedRatio ? s.lockedRatio.w / s.lockedRatio.h : undefined;
+      const { settings, areaClamp } = applySettingsPatchDetailed(s.settings, partial, s.aspectLocked, ratio);
+      const both = typeof partial.width === 'number' && typeof partial.height === 'number';
+      const note = withNote(s, settings, areaClamp, 'width' in partial || 'height' in partial);
+      // setting both sides explicitly while locked defines a new ratio
+      return s.aspectLocked && both ? { ...note, lockedRatio: { w: settings.width, h: settings.height } } : note;
     }),
-  setAspectLocked: (aspectLocked) => set({ aspectLocked }),
+  setAspectLocked: (aspectLocked) =>
+    set((s) => ({
+      aspectLocked,
+      lockedRatio: aspectLocked ? { w: s.settings.width, h: s.settings.height } : null,
+    })),
   setRatio: (text) => {
     const r = parseRatio(text);
     if (!r) return false;
     set((s) => {
       const d = dimsForRatioCapped(s.settings.width, r.w, r.h);
-      return withNote(s, { ...s.settings, width: d.width, height: d.height }, d.clamped ? 'both' : 'none', true);
+      const note = withNote(s, { ...s.settings, width: d.width, height: d.height }, d.clamped ? 'both' : 'none', true);
+      return s.aspectLocked ? { ...note, lockedRatio: { w: r.w, h: r.h } } : note;
     });
     return true;
   },
   applyPreset: (p) =>
     set((s) => {
       const { settings, areaClamp } = applySettingsPatchDetailed(s.settings, { width: p.width, height: p.height }, false);
-      return withNote(s, settings, areaClamp, true);
+      const note = withNote(s, settings, areaClamp, true);
+      return s.aspectLocked ? { ...note, lockedRatio: { w: p.width, h: p.height } } : note;
     }),
   toggleMotion: (style) =>
     set((s) => ({ settings: applySettingsPatch(s.settings, { motionPool: togglePool(s.settings.motionPool, style) }, false) })),

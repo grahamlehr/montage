@@ -98,6 +98,39 @@ describe('encoder area cap', () => {
   });
 });
 
+describe('locked ratio does not drift', () => {
+  it('repro: 16:9 lock, 4096 -> 2000 -> 4096 returns to 4096x2304', () => {
+    const ratio = 16 / 9;
+    let s = { ...DEFAULT_SETTINGS, width: 1920, height: 1080 };
+    const seq = [4096, 2000, 4096].map((w) => (s = applySettingsPatch(s, { width: w }, true, ratio)));
+    expect(seq[0]).toMatchObject({ width: 4096, height: 2304 });
+    expect(seq[1]).toMatchObject({ width: 2000, height: 1126 });
+    expect(seq[2]).toMatchObject({ width: 4096, height: 2304 });
+  });
+  it('long edit sequences stay within one even step of the exact ratio and fit the cap', () => {
+    for (const [rw, rh] of [[16, 9], [7, 5], [21, 9], [1, 1]] as const) {
+      const ratio = rw / rh;
+      let s = { ...DEFAULT_SETTINGS, ...dimsForRatio(1080, rw, rh) };
+      const edits = [4096, 2000, 4096, 1000, 3333, 4096, 128, 4096, 2500, 777, 4096];
+      edits.forEach((v, i) => {
+        s = applySettingsPatch(s, i % 3 === 2 ? { height: v } : { width: v }, true, ratio);
+        expect(fitsEncoderArea(s.width, s.height)).toBe(true);
+        // the derived side is within one even step (2 px) of the exact partner, unless pinned by range/cap
+        const edited = i % 3 === 2 ? 'height' : 'width';
+        const exact = edited === 'width' ? s.width / ratio : s.height * ratio;
+        const got = edited === 'width' ? s.height : s.width;
+        const capped = !fitsEncoderArea(edited === 'width' ? s.width : Math.round(exact), edited === 'width' ? Math.round(exact) : s.height);
+        if (exact >= 128 && exact <= 4096 && !capped) expect(Math.abs(got - exact)).toBeLessThanOrEqual(2);
+      });
+    }
+  });
+  it('1:1 at 4096 still gives 3072x3072', () => {
+    expect(applySettingsPatch({ ...DEFAULT_SETTINGS, width: 1080, height: 1080 }, { width: 4096 }, true, 1)).toMatchObject({
+      width: 3072, height: 3072,
+    });
+  });
+});
+
 describe('settings validation', () => {
   it('clamps ranges and rejects bad values', () => {
     const s = applySettingsPatch(DEFAULT_SETTINGS, {

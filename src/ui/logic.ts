@@ -178,8 +178,9 @@ export function applySettingsPatch(
   prev: MontageSettings,
   patch: Partial<MontageSettings>,
   aspectLocked: boolean,
+  lockedRatio?: number,
 ): MontageSettings {
-  return applySettingsPatchDetailed(prev, patch, aspectLocked).settings;
+  return applySettingsPatchDetailed(prev, patch, aspectLocked, lockedRatio).settings;
 }
 
 /** applySettingsPatch plus which dimension (if any) the encoder area cap forced down. */
@@ -187,6 +188,8 @@ export function applySettingsPatchDetailed(
   prev: MontageSettings,
   patch: Partial<MontageSettings>,
   aspectLocked: boolean,
+  /** Exact locked ratio (width / height); defaults to the current (possibly rounded) dimensions. */
+  lockedRatio?: number,
 ): { settings: MontageSettings; areaClamp: AreaClamp } {
   const next: MontageSettings = { ...prev };
   const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
@@ -203,7 +206,7 @@ export function applySettingsPatchDetailed(
     const changed = hasW ? 'width' : 'height';
     const value = (hasW ? patch.width : patch.height) as number;
     if (aspectLocked) {
-      const r = lockedDimsCapped(changed, value, prev.width / prev.height);
+      const r = lockedDimsCapped(changed, value, lockedRatio ?? prev.width / prev.height);
       next.width = r.width;
       next.height = r.height;
       if (r.clamped) areaClamp = 'both';
