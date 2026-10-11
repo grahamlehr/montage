@@ -123,6 +123,17 @@ describe('invariant 1: grouping off reproduces v1 (golden)', () => {
       ? { kind: 'single', layer: asV1(f.shot) }
       : { kind: 'transition', style: f.style, progress: f.progress, from: asV1(f.from), to: asV1(f.to) };
 
+  // Numbers match to 12 decimals: CI's x64 Node and a local arm64 Node can differ in the last ULP of
+  // Math.* results, so exact float equality against a golden recorded on one machine is not portable.
+  const approx = (v: unknown): unknown =>
+    typeof v === 'number'
+      ? expect.closeTo(v, 12)
+      : Array.isArray(v)
+        ? v.map(approx)
+        : v && typeof v === 'object'
+          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, approx(x)]))
+          : v;
+
   // Mixed orientations so 'auto' would group — 'off' must not.
   const dims = [P, L, P, P, Q, L, L, P];
   for (const [k, c] of (golden as unknown as GoldenCase[]).entries()) {
@@ -153,8 +164,8 @@ describe('invariant 1: grouping off reproduces v1 (golden)', () => {
           transitionIn: s.transitionIn,
         };
       });
-      expect(json({ ...tl, loop: undefined, segments: segs })).toEqual(c.timeline);
-      for (const { t, frame } of c.frames) expect(json(frameV1(frameAt(tl, t)))).toEqual(frame);
+      expect(json({ ...tl, loop: undefined, segments: segs })).toEqual(approx(c.timeline));
+      for (const { t, frame } of c.frames) expect(json(frameV1(frameAt(tl, t)))).toEqual(approx(frame));
     });
   }
 });
