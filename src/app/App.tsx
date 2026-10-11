@@ -174,7 +174,7 @@ export function App() {
       <BrowserNotice onClosed={() => setNoticeOpen(false)} />
       <header className="app-header">
         <h1>Montage</h1>
-        <span className="app-tagline">Photos to MP4, entirely in your browser.</span>
+        <span className="app-tagline">Make a <a href="https://www.google.com/search?q=montage+song+team+america" target="_blank">montage</a> video from photos in your browser. Definitely works in Chrome on desktop. Speed depends on your computer and the resolution.</span>
         <nav className="app-header-links" aria-label="Help and privacy">
           <button
             type="button"
