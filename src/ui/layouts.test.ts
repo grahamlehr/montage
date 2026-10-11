@@ -29,7 +29,7 @@ describe('layout settings patch', () => {
 describe('groupPhotos shim', () => {
   it("'off' is one photo per shot, overrides ignored", () => {
     const ov: Record<string, PhotoOverrides> = { p0: { group: 'joinNext' } };
-    expect(shape(groupPhotos(photos('PPL'), ov, S()))).toEqual(['single:0', 'single:1', 'single:2']);
+    expect(shape(groupPhotos(photos('PPL'), ov, S({ grouping: 'off' })))).toEqual(['single:0', 'single:1', 'single:2']);
   });
   it('auto pairs consecutive mismatched photos', () => {
     expect(shape(groupPhotos(photos('PPPLPP'), {}, S({ grouping: 'auto' })))).toEqual(['duo:0,1', 'single:2', 'single:3', 'duo:4,5']);

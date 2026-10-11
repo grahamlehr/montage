@@ -33,7 +33,7 @@ const bar = document.getElementById('bar') as HTMLProgressElement;
 let current: ExportHandle | null = null;
 
 window.runCase = async (width, height, fps, seconds, cancelAfterFrames, failEncoders, failAfter) => {
-  const settings: MontageSettings = { ...DEFAULT_SETTINGS, width, height, fps, totalDuration: seconds };
+  const settings: MontageSettings = { ...DEFAULT_SETTINGS, grouping: 'off', width, height, fps, totalDuration: seconds };
   let progressEvents = 0;
   const handle = startExport(
     { files: [], photos: [], overrides: {}, settings },

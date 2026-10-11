@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: MontageSettings = {
   fit: 'blur',
   background: '#000000',
   quality: 'high',
-  grouping: 'off',
+  grouping: 'auto',
   layoutPool: ['duo', 'trio', 'quad'],
   gutter: 0.012,
   reveal: 'together',
