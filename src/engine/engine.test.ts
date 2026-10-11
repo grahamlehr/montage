@@ -12,7 +12,7 @@ import {
 } from './index';
 
 const photos = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, naturalWidth: 1600, naturalHeight: 1200 }));
-const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, ...o });
+const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, loop: false, ...o });
 function build(n: number, o: Partial<MontageSettings> = {}, ov: Record<string, PhotoOverrides> = {}): Timeline {
   const r = buildTimeline(photos(n), ov, S(o));
   if (!r.ok) throw new Error(r.error);

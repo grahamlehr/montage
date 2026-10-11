@@ -130,7 +130,7 @@ the compiler finds every consumer.
 6. v1 timing invariants hold per shot: segments are contiguous, the last one ends at `L`, and
    `frameCount = round(L·fps)`.
 
-## 4. Behaviour spec (PLAN.md §4.9)
+## 4. Behaviour spec (PLAN.md §4.10)
 
 ### 4.7.1 Grouping (pure, in photo order)
 

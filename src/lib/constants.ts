@@ -42,9 +42,10 @@ export const DEFAULT_SETTINGS: MontageSettings = {
   layoutPool: ['duo', 'trio', 'quad'],
   gutter: 0.012,
   reveal: 'together',
+  loop: true,
 };
 
-/** Multi-photo shots (§4.9). Photos per layout; polaroid may fall back to 2 when only 2 are available. */
+/** Multi-photo shots (§4.10). Photos per layout; polaroid may fall back to 2 when only 2 are available. */
 export const LAYOUT_CAPACITY: Record<MultiLayout, number> = { duo: 2, pip: 2, trio: 3, polaroid: 3, quad: 4 };
 export const MAX_CELLS = 4;
 export const GUTTER_MAX = 0.04;

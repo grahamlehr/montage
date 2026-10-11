@@ -29,7 +29,7 @@ const L = { naturalWidth: 1600, naturalHeight: 1200 }; // landscape 1.33
 const Q = { naturalWidth: 1000, naturalHeight: 1000 }; // square
 const set = (spec: string): GroupablePhoto[] =>
   [...spec].map((c, i) => ({ id: `p${i}`, ...(c === 'P' ? P : c === 'L' ? L : Q) }));
-const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, ...o });
+const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, loop: false, ...o });
 const LAND = { width: 1920, height: 1080 };
 const PORT = { width: 1080, height: 1920 };
 const SQUARE = { width: 1080, height: 1080 };
@@ -153,7 +153,7 @@ describe('invariant 1: grouping off reproduces v1 (golden)', () => {
           transitionIn: s.transitionIn,
         };
       });
-      expect(json({ ...tl, segments: segs })).toEqual(c.timeline);
+      expect(json({ ...tl, loop: undefined, segments: segs })).toEqual(c.timeline);
       for (const { t, frame } of c.frames) expect(json(frameV1(frameAt(tl, t)))).toEqual(frame);
     });
   }

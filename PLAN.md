@@ -104,7 +104,7 @@ export interface PhotoSource {
 
 export interface PhotoOverrides {
   motion?: MotionStyle;
-  transitionIn?: TransitionStyle;   // transition INTO this photo (ignored for photo 0)
+  transitionIn?: TransitionStyle;   // transition INTO this photo (for photo 0: the wrap transition when looping, else ignored)
   fit?: FitMode;
   focus?: { x: number; y: number }; // 0..1 focal point for cover crop / motion target
 }
@@ -229,6 +229,16 @@ Given N photos, total `L`:
 - Bitrate = `w·h·fps·bpp`, bpp = 0.08 / 0.12 / 0.18 for standard/high/max. Keyframe every 2 s.
   Show estimated file size in the UI.
 
+### 4.9 Seamless loop (added after v1, #25)
+- `settings.loop` (default `true`): the timeline has N transitions instead of N−1 — the extra wrap
+  transition goes from the last photo into photo 0 and occupies the final `T_wrap` seconds of the video.
+- Timing: `L = Σ D_i − Σ_{j=0}^{N−1} T_j` (wrap included), so `D_i = w_i · (L + Σ T) / N`; the clamp also
+  covers the wrap pair (last, first). Validation rule unchanged.
+- Photo 0's segment starts at `−T_wrap`: during the wrap its layer is evaluated at `t − L`, so motion is
+  continuous and `frameAt(L) ≡ frameAt(0)` exactly. The last encoded frame is `L − 1/fps`; frame 0 follows it
+  on loop with no duplicated frame. A `cut` wrap has duration 0 (a plain cut at the loop point).
+- N = 1 with loop: the wrap transitions photo 0 into itself (motion returns to start through the transition).
+
 ### 4.6 Ingest & memory
 - Detect HEIC by magic bytes (`ftyp` brand `heic|heix|hevc|mif1|msf1`), not extension.
 - Decode with `createImageBitmap(blob, { imageOrientation: 'from-image', resizeWidth/Height, resizeQuality: 'high' })`.
@@ -246,15 +256,17 @@ Given N photos, total `L`:
 
 ### 4.8 Preview
 - Same renderer on an `HTMLCanvasElement`, scaled via CSS to fit the panel (letterboxed for odd ratios).
-- Play/pause, scrubber, current time / duration, loop toggle. Settings changes rebuild the timeline and
+- Play/pause, scrubber, current time / duration, loop toggle (bound to `settings.loop`, see §4.9). Settings changes rebuild the timeline and
   re-render the current frame immediately.
 
 ---
 
-### 4.9 Multi-photo shots (contract v2)
+### 4.10 Multi-photo shots (contract v2)
 Full spec: `docs/proposals/multi-photo-shots.md` §3–§4 (grouping, layout rects, timing, stagger, cell
 motion/fit, rendering, residency, UI). Decisions: default `grouping: 'off'` (output identical to v1; flip to
 `'auto'` after T16 passes); multi-cell shots force `cover` unless a per-photo `fit` override exists;
+looping (§4.9) works per shot: the wrap runs from the last shot into shot 0, shot 0 starts at −wrap, and a
+staggered shot 0 reveals its later cells only after the seam;
 `transitionIn` on a non-first photo of a shot is ignored; `mixed` uses a fixed p = 0.35.
 
 ## 5. Work breakdown

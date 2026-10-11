@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../lib/constants';
-import type { ExportRequest, PhotoSource, Timeline } from '../types';
+import type { ExportRequest, FrameDescriptor, PhotoSource, Shot, Timeline } from '../types';
 import { shotTimeline } from './shotFixtures';
 
 interface FakeBitmap {
@@ -12,20 +12,29 @@ interface FakeBitmap {
 const created: FakeBitmap[] = [];
 /** resident[i] = bitmap currently set on the fake renderer for photo i */
 const resident = new Map<number, FakeBitmap>();
-const drawn: Array<{ t: number; resident: number[] }> = [];
+const drawn: Array<{ t: number; resident: number[]; photos: number[] }> = [];
 /** decode bounds requested per photo index */
 const decodeSizes = new Map<number, { maxW: number; maxH: number }>();
 /** photos per shot for the next buildTimeline() call; default = one photo per shot (v1) */
 let shotSizes: number[] | null = null;
+/** true = use the real buildTimeline/frameAt (loop tests); false = hand-built shot timelines */
+let realEngine = false;
 
-vi.mock('../engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../engine')>()),
-  buildTimeline: (photos: PhotoSource[], _o: unknown, settings: { totalDuration: number; fps: number }) => ({
-    ok: true,
-    timeline: shotTimeline(shotSizes ?? photos.map(() => 1), settings.totalDuration, 0.5, settings.fps),
-  }),
-  frameAt: (_tl: Timeline, t: number) => ({ time: t }),
-}));
+vi.mock('../engine', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../engine')>();
+  return {
+    ...real,
+    buildTimeline: (...args: Parameters<typeof real.buildTimeline>) => {
+      if (realEngine) return real.buildTimeline(...args);
+      const [photos, , settings] = args;
+      return {
+        ok: true,
+        timeline: shotTimeline(shotSizes ?? photos.map(() => 1), settings.totalDuration, 0.5, settings.fps),
+      };
+    },
+    frameAt: (tl: Timeline, t: number) => (realEngine ? real.frameAt(tl, t) : { time: t }),
+  };
+});
 
 vi.mock('../ingest', () => ({
   decodeSizeFor: (out: { width: number; height: number }) => ({ maxW: out.width, maxH: out.height }),
@@ -52,8 +61,10 @@ vi.mock('../render', () => ({
       if (bmp) resident.set(i, bmp);
       else resident.delete(i);
     },
-    draw(frame: { time?: number }) {
-      drawn.push({ t: frame.time ?? -1, resident: [...resident.keys()].sort((a, b) => a - b) });
+    draw(frame: Partial<FrameDescriptor & { kind: 'single' }> & Partial<FrameDescriptor & { kind: 'transition' }>) {
+      const ids = (shot?: Shot) => shot?.cells.map((c) => c.photoIndex) ?? [];
+      const photos = frame.kind === 'single' ? ids(frame.shot) : [...ids(frame.from), ...ids(frame.to)];
+      drawn.push({ t: -1, resident: [...resident.keys()].sort((a, b) => a - b), photos });
     },
     dispose() {},
   }),
@@ -63,7 +74,7 @@ const { createMontageSource } = await import('./montageSource');
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
-function request(n: number): ExportRequest {
+function request(n: number, loop = false): ExportRequest {
   const photos: PhotoSource[] = Array.from({ length: n }, (_, i) => {
     const file = new File([''], `p${i}.jpg`);
     return { id: `p${i}`, file, name: file.name, naturalWidth: 400, naturalHeight: 300 };
@@ -72,7 +83,7 @@ function request(n: number): ExportRequest {
     files: photos.map((p) => p.file),
     photos,
     overrides: {},
-    settings: { ...DEFAULT_SETTINGS, width: 320, height: 240, fps: 30, totalDuration: 10 },
+    settings: { ...DEFAULT_SETTINGS, width: 320, height: 240, fps: 30, totalDuration: 10, loop },
   };
 }
 
@@ -82,6 +93,7 @@ beforeEach(() => {
   drawn.length = 0;
   decodeSizes.clear();
   shotSizes = null;
+  realEngine = false;
 });
 
 describe('createMontageSource residency and rewind', () => {
@@ -162,5 +174,39 @@ describe('createMontageSource residency and rewind', () => {
     src.dispose();
     await flush();
     expect(created.every((b) => b.closed)).toBe(true);
+  });
+});
+
+describe('createMontageSource with a seamless loop (§4.9)', () => {
+  it('every drawn frame has its photos resident and live, including the wrap back to photo 0', async () => {
+    realEngine = true;
+    for (const n of [1, 2, 3, 6]) {
+      created.length = 0;
+      resident.clear();
+      drawn.length = 0;
+      const src = createMontageSource();
+      await src.init({} as OffscreenCanvas, request(n, true), () => undefined);
+      const frames = 300; // 10 s @ 30 fps
+      for (let i = 0; i < frames; i++) {
+        await src.draw(i, i / 30);
+        expect(resident.size).toBeLessThanOrEqual(3);
+        const d = drawn.at(-1)!;
+        for (const p of d.photos) {
+          expect(d.resident).toContain(p);
+          expect(resident.get(p)?.closed).toBe(false);
+        }
+      }
+      // the final frames are a transition from the last photo into photo 0
+      const tail = drawn.at(-1)!;
+      expect(tail.photos).toEqual([n - 1, 0]);
+      // the start of the video is a plain single frame of photo 0 and does not need the last photo
+      expect(drawn[0]!.photos).toEqual([0]);
+      // rewind (encoder retry) restarts cleanly
+      await src.draw(0, 0);
+      expect(resident.get(0)?.closed).toBe(false);
+      src.dispose();
+      await flush();
+      expect(created.every((b) => b.closed)).toBe(true);
+    }
   });
 });

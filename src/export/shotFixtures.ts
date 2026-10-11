@@ -62,5 +62,5 @@ export function shotTimeline(shotSizes: number[], duration = 10, transition = 0.
       transitionIn: i === 0 ? null : { style: 'crossfade', start, duration: transition },
     };
   });
-  return { duration, fps, frameCount: Math.round(duration * fps), segments };
+  return { duration, fps, frameCount: Math.round(duration * fps), loop: false, segments };
 }

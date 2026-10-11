@@ -103,7 +103,7 @@ export function parseHex(hex: string): [number, number, number] {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// Multi-photo shots (PLAN.md §4.9 / proposal §4.7.5): cell geometry for the composite pass.
+// Multi-photo shots (PLAN.md §4.10 / proposal §4.7.5): cell geometry for the composite pass.
 
 /** Integer pixel rectangle, origin top-left. */
 export interface PixelRect {

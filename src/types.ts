@@ -18,11 +18,17 @@ export type TransitionStyle =
   | 'push'
   | 'wipe'
   | 'zoom'
-  | 'blur';
+  | 'blur'
+  | 'whip'
+  | 'zoomPunch'
+  | 'flash'
+  | 'lightLeak'
+  | 'glitch'
+  | 'iris';
 
 export type StyleSelection = 'sequence' | 'random';
 
-/** How a shot arranges its photos. `single` = one full-frame cell (v1 behaviour). PLAN.md §4.9. */
+/** How a shot arranges its photos. `single` = one full-frame cell (v1 behaviour). PLAN.md §4.10. */
 export type LayoutStyle = 'single' | 'duo' | 'trio' | 'quad' | 'pip' | 'polaroid';
 export type MultiLayout = Exclude<LayoutStyle, 'single'>;
 
@@ -56,7 +62,7 @@ export interface PhotoSource {
 
 export interface PhotoOverrides {
   motion?: MotionStyle;
-  transitionIn?: TransitionStyle; // transition INTO this photo's shot; honoured only on a shot's FIRST photo (ignored for photo 0)
+  transitionIn?: TransitionStyle; // transition INTO this photo's shot; honoured only on a shot's FIRST photo. For photo 0: the wrap transition when looping, else ignored
   fit?: FitMode;
   focus?: { x: number; y: number }; // 0..1 focal point for cover crop / motion target
   group?: 'solo' | 'joinNext'; // never group this photo / force it into a shot with the next photo
@@ -81,6 +87,12 @@ export interface MontageSettings {
   layoutPool: MultiLayout[]; // ≥1 enabled layouts, used when grouping = 'mixed'
   gutter: number; // 0..0.04 of the shorter output side, filled with `background`
   reveal: CellReveal;
+  /**
+   * Seamless loop (#25). When true the montage ends with a transition from the last photo back
+   * into the first, so frameAt(duration) equals frameAt(0) and the MP4 loops without a seam.
+   * Also makes the preview repeat. When false the video ends on the last photo.
+   */
+  loop: boolean;
 }
 
 /** One photo placed inside a shot. Per-photo motion/fit/focus live here (v1 had them on Segment). */
@@ -103,8 +115,14 @@ export interface Segment {
   layout: LayoutStyle;
   cells: Cell[]; // ≥1, consecutive photoIndex ascending, draw order back→front
   backdrop: number | null; // photoIndex whose blurred cover fills behind the cells; null = background colour
-  start: number; // seconds, shot first visible (start of its transition-in)
+  start: number; // seconds, shot first visible (start of its transition-in; −wrapDuration for shot 0 when looping)
   end: number; // seconds, shot last visible (end of transition-out)
+  /**
+   * Transition INTO this shot. Null for shot 0 unless the timeline loops: then segment 0's
+   * transitionIn is the wrap transition from the last shot, played at the END of the video
+   * (start = duration − wrapDuration), and segment 0's `start` is −wrapDuration (its motion
+   * begins during the wrap, so motion is continuous across the loop point).
+   */
   transitionIn: { style: TransitionStyle; start: number; duration: number } | null;
 }
 
@@ -118,6 +136,7 @@ export interface Timeline {
   duration: number;
   fps: number;
   frameCount: number; // round(duration * fps)
+  loop: boolean; // see MontageSettings.loop
   segments: Segment[];
 }
 

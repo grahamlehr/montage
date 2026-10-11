@@ -26,6 +26,7 @@ export const MOTION_STYLES: readonly MotionStyle[] = [
 ];
 export const TRANSITION_STYLES: readonly TransitionStyle[] = [
   'cut', 'crossfade', 'dipToBlack', 'slideLeft', 'slideRight', 'slideUp', 'slideDown', 'push', 'wipe', 'zoom', 'blur',
+  'whip', 'zoomPunch', 'flash', 'lightLeak', 'glitch', 'iris',
 ];
 export const FIT_MODES: readonly FitMode[] = ['cover', 'contain', 'blur'];
 export const QUALITIES = ['standard', 'high', 'max'] as const;
@@ -48,6 +49,7 @@ export const STYLE_LABELS: Record<string, string> = {
   cut: 'Cut', crossfade: 'Crossfade', dipToBlack: 'Dip to black',
   slideLeft: 'Slide left', slideRight: 'Slide right', slideUp: 'Slide up', slideDown: 'Slide down',
   push: 'Push', wipe: 'Wipe', zoom: 'Zoom', blur: 'Blur',
+  whip: 'Whip', zoomPunch: 'Zoom punch', flash: 'Flash', lightLeak: 'Light leak', glitch: 'Glitch', iris: 'Iris',
   cover: 'Cover', contain: 'Contain',
 };
 
@@ -250,6 +252,7 @@ export function applySettingsPatchDetailed(
   if (finite(patch.seed)) next.seed = Math.floor(patch.seed) >>> 0;
   if (patch.fit && FIT_MODES.includes(patch.fit)) next.fit = patch.fit;
   if (typeof patch.background === 'string' && isHexColour(patch.background)) next.background = patch.background.toLowerCase();
+  if (typeof patch.loop === 'boolean') next.loop = patch.loop;
   if (patch.quality && (QUALITIES as readonly string[]).includes(patch.quality)) next.quality = patch.quality;
   if (patch.grouping && GROUPINGS.includes(patch.grouping)) next.grouping = patch.grouping;
   if (patch.layoutPool) {
@@ -309,11 +312,12 @@ export interface TimingEstimate {
 /** Local even-split estimate (§4.1) for `shotCount` shots, used when the engine's timing isn't injected. */
 export function estimateTiming(s: MontageSettings, shotCount: number): TimingEstimate {
   const n = Math.max(1, shotCount);
-  let transition = n <= 1 ? 0 : TRANSITION_SLOW + (TRANSITION_FAST - TRANSITION_SLOW) * s.transitionSpeed;
-  let avgShot = (s.totalDuration + (n - 1) * transition) / n;
+  const count = s.loop ? n : n - 1; // a seamless loop adds the wrap transition (§4.9)
+  let transition = count <= 0 ? 0 : TRANSITION_SLOW + (TRANSITION_FAST - TRANSITION_SLOW) * s.transitionSpeed;
+  let avgShot = (s.totalDuration + count * transition) / n;
   if (transition > 0.45 * avgShot) {
     // transitions are clamped to 45% of the shot duration (§4.1 step 4)
-    avgShot = s.totalDuration / (n - 0.45 * (n - 1));
+    avgShot = s.totalDuration / (n - 0.45 * count);
     transition = 0.45 * avgShot;
   }
   const minShot = avgShot * (1 - 0.6 * s.pacing);

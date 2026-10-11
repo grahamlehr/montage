@@ -6,7 +6,7 @@ import { frameMd5s, psnrAvg, seekPreview } from './helpers/frames.js';
 /**
  * Invariant 1 (docs/proposals/multi-photo-shots.md §3): with `grouping: 'off'` (the default) the branch must
  * produce exactly main's output. Needs a dev server of `main` (e.g. a detached worktree of main running
- * `npx vite --port 5174`); point MONTAGE_MAIN_URL at it.
+ * `npx vite --port 5174` in a checkout of main); point MONTAGE_MAIN_URL at it. CI skips it.
  */
 const MAIN = process.env.MONTAGE_MAIN_URL;
 test.skip(!MAIN, 'Set MONTAGE_MAIN_URL to a dev server of main (e.g. http://localhost:5174) to run the identity check.');

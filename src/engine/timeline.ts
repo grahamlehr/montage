@@ -35,15 +35,18 @@ export function shotWeights(groups: readonly ShotGroup[], pacing: number, seed: 
   return raw.map((w) => (w * S) / sum);
 }
 
-/** Nominal transition into each shot (index 0 = null): first photo's override, else the pool at shot index. */
+/**
+ * Nominal transition into each shot (index 0 = null) — first photo's override, else the pool at shot index —
+ * plus the loop wrap (last shot → shot 0; photo 0's override wins) when `settings.loop`.
+ */
 function shotTransitions(
   photos: readonly GroupablePhoto[],
   groups: readonly ShotGroup[],
   overrides: Record<string, PhotoOverrides>,
   settings: MontageSettings,
-): ReturnType<typeof resolveStyles>['transitions'] {
+): Pick<ReturnType<typeof resolveStyles>, 'transitions' | 'wrap'> {
   const firsts = groups.map((g) => photos[g.photoIndices[0] as number] as GroupablePhoto);
-  return resolveStyles(firsts, overrides, settings).transitions;
+  return resolveStyles(firsts, overrides, settings);
 }
 
 export function buildTimeline(
@@ -69,17 +72,28 @@ export function buildTimeline(
   const shotTrans = shotTransitions(photos, groups, overrides, settings);
   const nominalT = transitionDuration(settings.transitionSpeed);
   const nominal: number[] = [];
-  for (let j = 0; j < S - 1; j++) nominal.push(shotTrans[j + 1] === 'cut' ? 0 : nominalT);
-  const { durations, transitions } = solveTiming(weights, L, nominal);
+  for (let j = 0; j < S - 1; j++) nominal.push(shotTrans.transitions[j + 1] === 'cut' ? 0 : nominalT);
+  const loop = settings.loop === true;
+  if (loop) nominal.push(shotTrans.wrap === 'cut' ? 0 : nominalT);
+  const { durations, transitions } = solveTiming(weights, L, nominal, loop);
+  const wrapT = loop ? (transitions[S - 1] as number) : 0;
 
   const segments: Segment[] = [];
-  let start = 0;
+  let start = 0 - wrapT; // shot 0 begins during the wrap so its motion is continuous across the loop point
   for (let s = 0; s < S; s++) {
     const group = groups[s] as ShotGroup;
     const end = s === S - 1 ? L : start + (durations[s] as number);
-    const tStyle = shotTrans[s];
+    const tStyle = shotTrans.transitions[s];
     const transitionIn =
-      s === 0 || !tStyle ? null : { style: tStyle, start, duration: transitions[s - 1] as number };
+      s === 0
+        ? loop && shotTrans.wrap
+          ? { style: shotTrans.wrap, start: L - wrapT, duration: wrapT }
+          : null
+        : !tStyle
+          ? null
+          : { style: tStyle, start, duration: transitions[s - 1] as number };
+    // The wrap plays at the END of the video, but shot 0's own in-transition still spans [start, 0].
+    const tInDuration = s === 0 ? wrapT : (transitionIn?.duration ?? 0);
     const multi = group.photoIndices.length > 1;
     const intensity = multi ? settings.motionIntensity * CELL_MOTION_SCALE : settings.motionIntensity;
     const plan = layoutCells(
@@ -93,8 +107,8 @@ export function buildTimeline(
     );
 
     // Stagger (§4.7.3): cell 0 present from start; the rest pop in after the transition-in.
-    const tInEnd = start + (transitionIn?.duration ?? 0);
-    const outgoing = s < S - 1 ? (transitions[s] as number) : 0;
+    const tInEnd = start + tInDuration;
+    const outgoing = s < S - 1 ? (transitions[s] as number) : wrapT;
     const hold = end - outgoing - tInEnd;
     const step = Math.min(STAGGER_STEP_MAX, STAGGER_STEP_FRACTION * hold);
     const revealDur = Math.min(STAGGER_DURATION_MAX, STAGGER_DURATION_FACTOR * step);
@@ -145,7 +159,7 @@ export function buildTimeline(
     });
     if (s < S - 1) start = end - (transitions[s] as number);
   }
-  return { ok: true, timeline: { duration: L, fps, frameCount: Math.round(L * fps), segments } };
+  return { ok: true, timeline: { duration: L, fps, frameCount: Math.round(L * fps), loop, segments } };
 }
 
 /** Cheap summary for UI labels. `transition` is the nominal (unclamped) duration; durations are per shot. */
@@ -159,7 +173,13 @@ export function timingSummary(
   const groups = groupPhotos(photos, overrides, settings);
   const shots = groups.length;
   const w = shotWeights(groups, settings.pacing, settings.seed);
-  const { durations } = solveTiming(w, settings.totalDuration, new Array<number>(shots - 1).fill(transition));
+  const loop = settings.loop === true;
+  const { durations } = solveTiming(
+    w,
+    settings.totalDuration,
+    new Array<number>(loop ? shots : shots - 1).fill(transition),
+    loop,
+  );
   const avgShot = durations.reduce((a, b) => a + b, 0) / shots;
   const minShot = Math.min(...durations);
   const ok = minPossibleDuration(w, settings.totalDuration) >= MIN_PHOTO_DURATION - 1e-9;

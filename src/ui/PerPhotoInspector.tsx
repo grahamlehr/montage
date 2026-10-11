@@ -11,6 +11,7 @@ export function PerPhotoInspector() {
   const selectedId = useMontageStore((s) => s.selectedId);
   const photos = useMontageStore((s) => s.photos);
   const override = useMontageStore((s) => (s.selectedId ? s.overrides[s.selectedId] : undefined));
+  const loop = useMontageStore((s) => s.settings.loop);
   const setOverride = useMontageStore((s) => s.setOverride);
   const clearOverride = useMontageStore((s) => s.clearOverride);
   const groupingOff = useMontageStore((s) => s.settings.grouping === 'off');
@@ -31,8 +32,9 @@ export function PerPhotoInspector() {
   const shot = shots[index];
   const isLast = index === photos.length - 1;
   const joined = !!shot && shot.position > 0;
-  const transitionDisabled = index === 0 || joined;
-  const transitionLabel = index === 0 ? ' (not used for the first photo)' : '';
+  const transitionDisabled = (index === 0 && !loop) || joined;
+  const transitionLabel =
+    index === 0 ? (loop ? ' (used for the loop back to this photo)' : ' (not used for the first photo)') : '';
 
   const setFocusFrom = (e: MouseEvent<HTMLButtonElement>) => {
     const r = e.currentTarget.getBoundingClientRect();

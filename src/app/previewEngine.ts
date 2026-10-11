@@ -168,7 +168,8 @@ export class PreviewEngine {
     const settings = this.settings;
     if (!timeline || !settings) return [];
     const cur = segmentIndexAt(timeline, this.time);
-    const segs = segmentWindow(timeline.segments.length, cur, BEHIND, AHEAD, this.loop);
+    // On a looping timeline the last shot's next is shot 0 (the wrap, §4.9).
+    const segs = segmentWindow(timeline.segments.length, cur, BEHIND, AHEAD, timeline.loop);
     const naturals = this.photos.map((p) => ({ width: p.naturalWidth, height: p.naturalHeight }));
     return photosForSegments(timeline, segs, { width: settings.width, height: settings.height }, naturals);
   }

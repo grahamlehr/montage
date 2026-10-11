@@ -73,12 +73,17 @@ export function createMontageSource(): FrameSource {
       if (!renderer || !timeline) throw new Error('not initialised');
       // Derived from t alone, so going backwards (an encoder retry restarting at frame 0) rewinds the
       // window and re-decodes whatever it needs.
+      const n = timeline.segments.length;
       const cur = segmentIndexAt(timeline, t);
-      // Window: previous shot (still visible in a transition), current, next (decoded ahead).
-      const needed = photosOfSegments([cur - 1, cur]);
-      const ahead = photosOfSegments([cur + 1]).filter(
-        (d) => !needed.some((n) => n.photoIndex === d.photoIndex),
-      );
+      // Window: previous shot (still visible in a transition), current, next (decoded ahead). On a looping
+      // timeline the last shot's next is shot 0 (the wrap, §4.9); shot 0's own transition-in is that wrap,
+      // so it never needs a previous shot at the start of the video.
+      const next = timeline.loop ? (cur + 1) % n : cur + 1;
+      const wrap = timeline.loop ? timeline.segments[0]?.transitionIn : null;
+      const inWrap = cur === n - 1 && !!wrap && t >= wrap.start;
+      // The wrap needs shot 0 on screen as soon as it starts.
+      const needed = photosOfSegments(inWrap ? [cur - 1, cur, next] : [cur - 1, cur]);
+      const ahead = photosOfSegments([next]).filter((d) => !needed.some((x) => x.photoIndex === d.photoIndex));
       const wanted = new Set([...needed, ...ahead].map((d) => d.photoIndex));
       for (const i of [...entries.keys()]) if (!wanted.has(i)) release(i);
       for (const d of ahead) void load(d).catch(() => undefined);
