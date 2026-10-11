@@ -24,6 +24,7 @@ export const MOTION_STYLES: readonly MotionStyle[] = [
 ];
 export const TRANSITION_STYLES: readonly TransitionStyle[] = [
   'cut', 'crossfade', 'dipToBlack', 'slideLeft', 'slideRight', 'slideUp', 'slideDown', 'push', 'wipe', 'zoom', 'blur',
+  'whip', 'zoomPunch', 'flash', 'lightLeak', 'glitch', 'iris',
 ];
 export const FIT_MODES: readonly FitMode[] = ['cover', 'contain', 'blur'];
 export const QUALITIES = ['standard', 'high', 'max'] as const;
@@ -34,6 +35,7 @@ export const STYLE_LABELS: Record<string, string> = {
   cut: 'Cut', crossfade: 'Crossfade', dipToBlack: 'Dip to black',
   slideLeft: 'Slide left', slideRight: 'Slide right', slideUp: 'Slide up', slideDown: 'Slide down',
   push: 'Push', wipe: 'Wipe', zoom: 'Zoom', blur: 'Blur',
+  whip: 'Whip', zoomPunch: 'Zoom punch', flash: 'Flash', lightLeak: 'Light leak', glitch: 'Glitch', iris: 'Iris',
   cover: 'Cover', contain: 'Contain',
 };
 

@@ -21,6 +21,12 @@ const STYLES: TransitionStyle[] = [
   'wipe',
   'zoom',
   'blur',
+  'whip',
+  'zoomPunch',
+  'flash',
+  'lightLeak',
+  'glitch',
+  'iris',
 ];
 const MOTIONS: MotionStyle[] = [
   'none',
@@ -216,12 +222,13 @@ async function main() {
         copy.getContext('2d')!.drawImage(canvas, 0, 0);
         strip.push({ c: copy, cap: `p=${p}` });
       }
-      // dense sweep for garbage check (magenta = bg leak, black = undefined sample), excluding dipToBlack
+      // dense sweep for garbage check (magenta = bg leak, black = undefined sample), excluding dipToBlack.
+      // glitch's RGB split turns white-on-dark edges into genuine R+B fringes, so skip its magenta key.
       let sweepBad = 0;
       for (let k = 1; k < 20; k++) {
         r.draw(trans(style, k / 20));
         const px = readPixels(canvas);
-        sweepBad += count(px, (R, G, B) => R > 200 && G < 60 && B > 200);
+        if (style !== 'glitch') sweepBad += count(px, (R, G, B) => R > 200 && G < 60 && B > 200);
         if (style !== 'dipToBlack') sweepBad += count(px, (R, G, B) => R < 6 && G < 6 && B < 6);
       }
       addRow(style, strip, dispH);

@@ -18,7 +18,13 @@ export type TransitionStyle =
   | 'push'
   | 'wipe'
   | 'zoom'
-  | 'blur';
+  | 'blur'
+  | 'whip'
+  | 'zoomPunch'
+  | 'flash'
+  | 'lightLeak'
+  | 'glitch'
+  | 'iris';
 
 export type StyleSelection = 'sequence' | 'random';
 
