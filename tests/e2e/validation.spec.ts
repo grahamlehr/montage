@@ -13,6 +13,7 @@ test('too many photos for the length shows a validation error until fixed', asyn
   const d = page.locator('#set-duration');
   await d.fill('120');
   await d.press('Enter');
+  await page.getByTestId('rebuild-button').click();
   await expect(err).toHaveCount(0);
   await expect(page.getByTestId('export-button')).toBeEnabled();
 });

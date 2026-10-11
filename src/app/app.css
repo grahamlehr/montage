@@ -108,3 +108,86 @@
 .app-ink { background: var(--color-text); color: var(--color-bg); border-color: transparent; font-weight: 600; }
 .app-ink:hover:not(:disabled) { background: var(--color-text); opacity: 0.88; }
 .app-ink:active:not(:disabled) { background: var(--color-text); opacity: 0.78; }
+
+/* Header links: quiet text buttons on the right of the toolbar. */
+.app-header-links { margin-left: auto; display: flex; gap: var(--space-4); }
+.app-link {
+  background: none; border: 0; padding: 0; cursor: pointer; font-size: 12.5px; color: var(--cs-muted);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--cs-strong);
+}
+.app-link:hover { color: var(--color-text); }
+
+/* Settings column: the panel scrolls; the Rebuild bar stays pinned beneath it, closed by a 2px rule. */
+.app-right { overflow: hidden; padding: 0; gap: 0; }
+.app-right-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
+.app-rebuild {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3) var(--space-5); border-top: 2px solid var(--color-divider); background: var(--color-bg);
+}
+.app-rebuild-status { font-size: 12.5px; color: var(--cs-muted); }
+.app-rebuild-status[data-pending] { color: var(--color-text); font-weight: 600; }
+.app-rebuild-status[data-pending]::before {
+  content: ''; display: inline-block; width: 7px; height: 7px; margin-right: var(--space-2);
+  background: var(--color-text); vertical-align: 1px;
+}
+
+/* Out-of-date preview: a standby (STBY) tab on the stage's top rule. */
+.app-preview-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.app-stale {
+  position: absolute; top: 2px; left: 50%; transform: translateX(-50%); z-index: 1;
+  font-family: var(--font-heading); font-weight: 600; font-size: 12px; line-height: 1.25;
+  color: #201e1d; background: var(--cs-stby-bg); border: 0; padding: 6px 12px; cursor: pointer;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme='day']) .app-stale { color: #f3f2f2; } }
+:root[data-theme='dark'] .app-stale { color: #f3f2f2; }
+.app-stale:hover:not(:disabled) { filter: brightness(0.96); }
+.app-stale:disabled { cursor: not-allowed; opacity: 0.8; }
+
+/* Cookie consent: a bottom bar in the .dialog anatomy (2px ink top rule), non-modal. */
+.app-consent {
+  position: fixed; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); z-index: 50;
+  display: flex; align-items: center; gap: var(--space-6); max-width: 880px; margin: 0 auto;
+  padding: var(--space-4) var(--space-5); color: var(--color-text); background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-top: 2px solid var(--color-text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  animation: app-dialog-pop 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.app-consent h2 { font-size: 14px; margin: 0 0 var(--space-1); }
+.app-consent p { margin: 0; font-size: 12.5px; line-height: 1.5; opacity: 0.85; }
+.app-consent-text { flex: 1; min-width: 0; }
+.app-consent-actions { display: flex; gap: var(--space-3); flex-shrink: 0; }
+@media (max-width: 640px) {
+  .app-consent { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  .app-consent-actions > * { flex: 1; }
+}
+
+/* Guided tour: a dim layer with a square spotlight cut out by a huge box-shadow, plus a .dialog-style card. */
+.app-tour { position: fixed; inset: 0; z-index: 100; }
+.app-tour-shield { position: absolute; inset: 0; }
+.app-tour-spot {
+  position: fixed; pointer-events: none; outline: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 9999px rgba(10, 10, 10, 0.68);
+  transition: top 220ms cubic-bezier(0.16, 1, 0.3, 1), left 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 220ms cubic-bezier(0.16, 1, 0.3, 1), height 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.app-tour-card {
+  position: fixed; padding: var(--space-5) var(--space-6); color: var(--color-text); background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-top: 2px solid var(--color-text);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+  transition: top 220ms cubic-bezier(0.16, 1, 0.3, 1), left 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.app-tour-card h2 { font-size: 18px; margin: 0 0 var(--space-2); }
+.app-tour-card p { margin: 0; font-size: 13px; line-height: 1.55; opacity: 0.85; }
+.app-tour-progress { display: flex; gap: var(--space-1); margin-bottom: var(--space-4); }
+.app-tour-progress span { flex: 1; height: 2px; background: var(--color-divider); }
+.app-tour-progress span[data-done], .app-tour-progress span[data-active] { background: var(--color-text); }
+.app-tour-actions { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-5); }
+.app-tour-spacer { flex: 1; }
+.app-tour-skip {
+  background: none; border: 0; padding: 0; cursor: pointer; font-size: 12.5px; color: var(--cs-muted);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.app-tour-skip:hover { color: var(--color-text); }
+@media (prefers-reduced-motion: reduce) {
+  .app-tour-spot, .app-tour-card, .app-consent { transition: none; animation: none; }
+}

@@ -22,6 +22,12 @@ Latest desktop **Google Chrome**. Other browsers aren't supported.
 ## Privacy
 Everything runs locally in your browser. Photos are never uploaded anywhere.
 
+With the visitor's consent (cookie banner; change it any time via **Cookies** in the header), the deployed site
+loads Google Analytics to count visits and feature use: events such as `photos_added` (a count), `rebuild`,
+`export_start` / `export_complete` (size, fps, length, photo count) and `tour_complete`. File names and image
+data are never sent. Without consent, no Google script is loaded. Only production builds include analytics;
+override the measurement ID with `VITE_GA_ID` (an empty value disables it).
+
 ## Development
 ```bash
 npm install

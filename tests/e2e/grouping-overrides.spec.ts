@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { FIXTURES, openApp, setSettings, tiles, trackErrors, upload } from './helpers/app.js';
+import { FIXTURES, openApp, rebuild, setSettings, tiles, trackErrors, upload } from './helpers/app.js';
 import { getTimeline } from './helpers/frames.js';
 
 const s50 = (n: number) => path.join(FIXTURES, 'set50', `photo-${String(n).padStart(2, '0')}.jpg`);
@@ -16,7 +16,8 @@ test('Keep solo / Join with next change grouping; joined photos lock the transit
   await openApp(page);
   await upload(page, PHOTOS);
   await setSettings(page, { width: 1920, height: 1080, totalDuration: 12 });
-  await page.getByTestId('grouping-auto').click();
+  await page.getByTestId('grouping-auto').click(); // already the default: may leave nothing to rebuild
+  await rebuild(page);
 
   const transition = page.locator('#insp-transition');
   const group = page.locator('#insp-group');
@@ -64,6 +65,7 @@ test('Keep solo / Join with next change grouping; joined photos lock the transit
 
   // Grouping off ignores overrides entirely (invariant 1) and re-enables every transition select.
   await page.getByTestId('grouping-off').click();
+  await page.getByTestId('rebuild-button').click();
   await expect.poll(() => shotPos(page)).toEqual(['-', '-', '-', '-', '-']);
   expect(await layouts(page)).toEqual(['single', 'single', 'single', 'single', 'single']);
   await selectPhoto(page, 4);

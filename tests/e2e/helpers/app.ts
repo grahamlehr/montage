@@ -29,7 +29,16 @@ export function trackErrors(page: Page): string[] {
   return errors;
 }
 
+/** Pretend this browser has visited before: no cookie banner, no first-visit tour. */
+export async function skipFirstVisit(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem('montage.analyticsConsent', 'denied');
+    localStorage.setItem('montage.tourSeen', '1');
+  });
+}
+
 export async function openApp(page: Page): Promise<void> {
+  await skipFirstVisit(page);
   await page.goto('/');
   await expect(page.getByTestId('file-input')).toBeAttached();
 }
@@ -54,6 +63,12 @@ export async function setSettings(page: Page, patch: Record<string, unknown>): P
     ).__montage;
     m.store.getState().setSettings(p);
   }, patch);
+  await rebuild(page);
+}
+
+/** Apply staged settings to the preview/export, as the Rebuild button does (also when they don't validate). */
+export async function rebuild(page: Page): Promise<void> {
+  await page.evaluate(() => (window as unknown as { __montage: { rebuild(): void } }).__montage.rebuild());
 }
 
 /** Set dims/fps/duration through the real inputs. */
@@ -74,6 +89,8 @@ export async function setViaInputs(
   const d = page.locator('#set-duration');
   await d.fill(String(o.seconds));
   await d.press('Enter');
+  const btn = page.getByTestId('rebuild-button');
+  if (await btn.isEnabled()) await btn.click();
 }
 
 export async function exportAndDownload(

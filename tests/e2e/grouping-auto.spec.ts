@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { assertMontage } from './helpers/ffprobe.js';
-import { exportAndDownload, FIXTURES, fixture, openApp, setSettings, tiles, trackErrors, upload } from './helpers/app.js';
+import { exportAndDownload, FIXTURES, fixture, openApp, rebuild, setSettings, tiles, trackErrors, upload } from './helpers/app.js';
 import { contactSheet, frameRgb, getTimeline, T16_DIR } from './helpers/frames.js';
 
 const s50 = (n: number) => path.join(FIXTURES, 'set50', `photo-${String(n).padStart(2, '0')}.jpg`);
@@ -22,7 +22,8 @@ test('auto grouping pairs portraits in 16:9, brackets them in the strip and expo
   await openApp(page);
   await upload(page, PHOTOS);
   await setSettings(page, { width: W, height: H, fps: 30, totalDuration: 20, fit: 'blur' });
-  await page.getByTestId('grouping-auto').click();
+  await page.getByTestId('grouping-auto').click(); // already the default: may leave nothing to rebuild
+  await rebuild(page);
   await expect(page.getByTestId('grouping-auto')).toHaveAttribute('aria-checked', 'true');
 
   // Strip: 4 Duo brackets over photos 1-2, 4-5, 7-8, 10-11; singles elsewhere.
