@@ -1,17 +1,40 @@
-import type { FrameDescriptor, Layer, Segment, Timeline } from '../types';
-import { clamp, easeInOut, lerp } from './easing';
+import type { Cell, CellLayer, FrameDescriptor, Layer, Segment, Shot, Timeline } from '../types';
+import { clamp, easeInOut, easeOut, lerp } from './easing';
 
-function layerAt(seg: Segment, t: number): Layer {
+function layerAt(seg: Segment, cell: Cell, t: number): Layer {
   const span = seg.end - seg.start;
   const u = easeInOut(span > 0 ? (t - seg.start) / span : 1);
-  const a = seg.motionFrom;
-  const b = seg.motionTo;
+  const a = cell.motionFrom;
+  const b = cell.motionTo;
   return {
-    photoIndex: seg.photoIndex,
-    fit: seg.fit,
-    focus: { x: seg.focus.x, y: seg.focus.y },
+    photoIndex: cell.photoIndex,
+    fit: cell.fit,
+    focus: { x: cell.focus.x, y: cell.focus.y },
     transform: { scale: lerp(a.scale, b.scale, u), tx: lerp(a.tx, b.tx, u), ty: lerp(a.ty, b.ty, u) },
   };
+}
+
+/** Eased reveal of a cell at time t: 0 before revealStart, 1 once revealDuration has elapsed (§4.7.3). */
+export function revealAt(cell: Pick<Cell, 'revealStart' | 'revealDuration'>, t: number): number {
+  if (!(cell.revealDuration > 0)) return 1;
+  return easeOut((t - cell.revealStart) / cell.revealDuration);
+}
+
+/** Everything drawn for one segment (shot) at time t. */
+export function shotAt(seg: Segment, t: number): Shot {
+  const cells: CellLayer[] = seg.cells.map((cell) => ({
+    ...layerAt(seg, cell, t),
+    rect: { x: cell.rect.x, y: cell.rect.y, w: cell.rect.w, h: cell.rect.h },
+    rotation: cell.rotation,
+    border: cell.border,
+    reveal: revealAt(cell, t),
+  }));
+  let backdrop: Layer | null = null;
+  if (seg.backdrop !== null) {
+    const src = seg.cells.find((c) => c.photoIndex === seg.backdrop);
+    if (src) backdrop = { ...layerAt(seg, src, t), fit: 'cover' };
+  }
+  return { backdrop, cells };
 }
 
 /** Pure description of the frame at time `t` (clamped to [0, duration]). */
@@ -34,9 +57,9 @@ export function frameAt(timeline: Timeline, t: number): FrameDescriptor {
       kind: 'transition',
       style: tr.style,
       progress: easeInOut((time - tr.start) / tr.duration),
-      from: layerAt(prev, time),
-      to: layerAt(seg, time),
+      from: shotAt(prev, time),
+      to: shotAt(seg, time),
     };
   }
-  return { kind: 'single', layer: layerAt(seg, time) };
+  return { kind: 'single', shot: shotAt(seg, time) };
 }
