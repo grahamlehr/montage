@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { assertMontage } from './helpers/ffprobe.js';
-import { exportAndDownload, fixture, set50, setSettings, upload } from './helpers/app.js';
+import { exportAndDownload, fixture, set50, setSettings, skipFirstVisit, upload } from './helpers/app.js';
 import { frameMd5s, psnrAvg, seekPreview } from './helpers/frames.js';
 
 /**
@@ -26,6 +26,7 @@ const TIMES = [0.6, 3.1, 7.4]; // inside a hold, a transition and a late hold
 async function run(browser: Browser, base: string, patch: Record<string, unknown>) {
   const ctx = await browser.newContext({ baseURL: base, acceptDownloads: true, viewport: { width: 1400, height: 1000 } });
   const page: Page = await ctx.newPage();
+  await skipFirstVisit(page);
   await page.goto('/');
   await expect(page.getByTestId('file-input')).toBeAttached();
   await upload(page, PHOTOS);

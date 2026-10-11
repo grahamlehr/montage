@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { assertMontage } from './helpers/ffprobe.js';
-import { exportAndDownload, expectResultMeta, openApp, set50, setViaInputs, upload } from './helpers/app.js';
+import { exportAndDownload, expectResultMeta, openApp, rebuild, set50, setViaInputs, upload } from './helpers/app.js';
 
 const dims = async (page: import('@playwright/test').Page) => ({
   w: Number(await page.locator('#set-width').inputValue()),
@@ -61,6 +61,7 @@ test('export stays disabled with a reason if an over-cap size slips past the UI'
     const m = (window as unknown as { __montage: { store: { setState(p: unknown): void; getState(): { settings: object } } } }).__montage;
     m.store.setState({ settings: { ...m.store.getState().settings, width: 4096, height: 4096 } });
   });
+  await rebuild(page);
   await expect(page.getByTestId('export-button')).toBeDisabled();
   await expect(page.getByTestId('export-blocked')).toContainText('9.4 MP');
 });
