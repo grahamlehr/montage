@@ -74,11 +74,17 @@ export function createMontageSource(): FrameSource {
       while (cursor > 0 && (segs[cursor]?.start ?? 0) > t) cursor--;
       while (cursor + 1 < segs.length && (segs[cursor + 1]?.start ?? Infinity) <= t) cursor++;
       // Window: previous (still visible in a transition), current, next (decoded ahead).
-      const wanted = new Set([cursor - 1, cursor, cursor + 1].filter((i) => i >= 0 && i < segs.length));
+      // On a looping timeline the last segment's next is photo 0 (the wrap transition, §4.9); photo 0's
+      // own transition-in is that wrap, so it never needs a previous at the start of the video.
+      const n = segs.length;
+      const ahead = timeline.loop ? (cursor + 1) % n : cursor + 1;
+      const wanted = new Set([cursor - 1, cursor, ahead].filter((i) => i >= 0 && i < n));
       for (const i of [...entries.keys()]) if (!wanted.has(i)) release(i);
       const needed = [cursor - 1, cursor].filter((i) => wanted.has(i));
-      const ahead = cursor + 1;
-      if (wanted.has(ahead)) void load(ahead).catch(() => undefined);
+      // The wrap needs photo 0 on screen as soon as it starts.
+      const wrap = timeline.loop ? segs[0]?.transitionIn : null;
+      if (cursor === n - 1 && wrap && t >= wrap.start && wanted.has(ahead)) needed.push(ahead);
+      else if (wanted.has(ahead)) void load(ahead).catch(() => undefined);
       await Promise.all(needed.map((i) => load(i)));
       renderer.draw(frameAt(timeline, t));
     },
