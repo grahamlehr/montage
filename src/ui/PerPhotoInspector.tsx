@@ -1,7 +1,8 @@
 import type { KeyboardEvent, MouseEvent } from 'react';
-import { FIT_MODES, MOTION_STYLES, STYLE_LABELS, TRANSITION_STYLES } from './logic';
+import { FIT_MODES, LAYOUT_LABELS, MOTION_STYLES, STYLE_LABELS, TRANSITION_STYLES } from './logic';
+import { useShots } from './shots';
 import { useMontageStore } from './store';
-import type { FitMode, MotionStyle, TransitionStyle } from '../types';
+import type { FitMode, MotionStyle, PhotoOverrides, TransitionStyle } from '../types';
 import './ui.css';
 
 const DEFAULT = '';
@@ -12,6 +13,8 @@ export function PerPhotoInspector() {
   const override = useMontageStore((s) => (s.selectedId ? s.overrides[s.selectedId] : undefined));
   const setOverride = useMontageStore((s) => s.setOverride);
   const clearOverride = useMontageStore((s) => s.clearOverride);
+  const groupingOff = useMontageStore((s) => s.settings.grouping === 'off');
+  const shots = useShots();
 
   const index = photos.findIndex((p) => p.source.id === selectedId);
   const photo = index >= 0 ? photos[index] : undefined;
@@ -25,6 +28,11 @@ export function PerPhotoInspector() {
   }
   const id = selectedId;
   const focus = override?.focus;
+  const shot = shots[index];
+  const isLast = index === photos.length - 1;
+  const joined = !!shot && shot.position > 0;
+  const transitionDisabled = index === 0 || joined;
+  const transitionLabel = index === 0 ? ' (not used for the first photo)' : '';
 
   const setFocusFrom = (e: MouseEvent<HTMLButtonElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -59,12 +67,34 @@ export function PerPhotoInspector() {
         </select>
       </div>
       <div className="mt-field">
-        <label htmlFor="insp-transition">Transition in{index === 0 ? ' (not used for the first photo)' : ''}</label>
-        <select id="insp-transition" className="mt-select" disabled={index === 0} value={index === 0 ? DEFAULT : (override?.transitionIn ?? DEFAULT)}
+        <label htmlFor="insp-transition">Transition in{transitionLabel}</label>
+        <select id="insp-transition" className="mt-select" disabled={transitionDisabled}
+          aria-describedby={joined ? 'insp-transition-hint' : undefined}
+          value={transitionDisabled ? DEFAULT : (override?.transitionIn ?? DEFAULT)}
           onChange={(e) => setOverride(id, { transitionIn: (e.target.value || undefined) as TransitionStyle | undefined })}>
           <option value={DEFAULT}>Use default</option>
           {TRANSITION_STYLES.map((m) => <option key={m} value={m}>{STYLE_LABELS[m]}</option>)}
         </select>
+        {joined && (
+          <span id="insp-transition-hint" className="mt-muted mt-select-hint" data-testid="transition-joined-hint">Joined with the previous photo</span>
+        )}
+      </div>
+      <div className="mt-field">
+        <label htmlFor="insp-group">Grouping</label>
+        <select id="insp-group" className="mt-select" value={override?.group ?? DEFAULT}
+          aria-describedby="insp-group-hint"
+          onChange={(e) => setOverride(id, { group: (e.target.value || undefined) as PhotoOverrides['group'] })}>
+          <option value={DEFAULT}>Default</option>
+          <option value="solo">Keep solo</option>
+          <option value="joinNext" disabled={isLast}>Join with next{isLast ? ' (last photo)' : ''}</option>
+        </select>
+        <span id="insp-group-hint" className="mt-muted mt-select-hint" data-testid="group-hint">
+          {groupingOff
+            ? 'Grouping is off in Layouts, so every photo is its own shot.'
+            : shot && shot.size > 1
+              ? `In a ${LAYOUT_LABELS[shot.layout]} shot (photo ${shot.position + 1} of ${shot.size}).`
+              : 'Shown on its own.'}
+        </span>
       </div>
       <div className="mt-field">
         <label htmlFor="insp-fit">Fit</label>

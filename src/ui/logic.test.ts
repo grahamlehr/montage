@@ -179,7 +179,8 @@ describe('estimates', () => {
   it('timing', () => {
     const t = estimateTiming({ ...DEFAULT_SETTINGS, totalDuration: 30, transitionSpeed: 0 }, 10);
     expect(t.transition).toBeCloseTo(1.6);
-    expect(t.avgPhoto).toBeCloseTo((30 + 9 * 1.6) / 10);
+    expect(t.avgShot).toBeCloseTo((30 + 9 * 1.6) / 10);
+    expect(t.shots).toBe(10);
     expect(estimateTiming(DEFAULT_SETTINGS, 1000).ok).toBe(false);
   });
   it('bytes', () => {

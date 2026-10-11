@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
@@ -8,7 +8,9 @@ import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useS
 import { CSS } from '@dnd-kit/utilities';
 import { useMontageStore } from './store';
 import type { PhotoItem } from './types';
-import { skippedFilesMessage } from './logic';
+import { LAYOUT_LABELS, skippedFilesMessage } from './logic';
+import type { ShotMembership } from './logic';
+import { useShots } from './shots';
 import './ui.css';
 
 export interface PhotoTrayProps {
@@ -18,7 +20,12 @@ export interface PhotoTrayProps {
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif|gif|heic|heif)$/i;
 const isImageFile = (f: File) => f.type.startsWith('image/') || IMAGE_EXT.test(f.name);
 
-function Tile({ item, index, selected }: { item: PhotoItem; index: number; selected: boolean }) {
+function shotPos(m: ShotMembership | undefined): 'start' | 'mid' | 'end' | undefined {
+  if (!m || m.size < 2) return undefined;
+  return m.position === 0 ? 'start' : m.position === m.size - 1 ? 'end' : 'mid';
+}
+
+function Tile({ item, index, selected, shot }: { item: PhotoItem; index: number; selected: boolean; shot?: ShotMembership }) {
   const select = useMontageStore((s) => s.select);
   const removePhoto = useMontageStore((s) => s.removePhoto);
   const hasOverride = useMontageStore((s) => item.source.id in s.overrides);
@@ -27,6 +34,10 @@ function Tile({ item, index, selected }: { item: PhotoItem; index: number; selec
   });
   const reorder = useMontageStore((s) => s.reorder);
   const name = item.source.name;
+  const pos = shotPos(shot);
+  const shotText = shot && pos
+    ? `, ${LAYOUT_LABELS[shot.layout]} shot with photos ${index - shot.position + 1}–${index - shot.position + shot.size}`
+    : '';
   /** Reliable one-step keyboard move when not mid-drag (dnd-kit's grid navigation can skip). */
   const onHandleKey = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (isDragging) return;
@@ -42,13 +53,16 @@ function Tile({ item, index, selected }: { item: PhotoItem; index: number; selec
       data-selected={selected}
       data-dragging={isDragging}
       data-photo-id={item.source.id}
+      data-shot-pos={pos}
+      data-shot-tone={pos ? shot?.tone : undefined}
+      data-shot-label={pos && shot ? LAYOUT_LABELS[shot.layout] : undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       <button
         type="button"
         className="mt-tile-select"
         aria-pressed={selected}
-        aria-label={`Select photo ${index + 1}: ${name}`}
+        aria-label={`Select photo ${index + 1}: ${name}${shotText}`}
         title={name}
         onClick={() => select(selected ? null : item.source.id)}
         onPointerDown={listeners?.onPointerDown as React.PointerEventHandler | undefined}
@@ -56,6 +70,9 @@ function Tile({ item, index, selected }: { item: PhotoItem; index: number; selec
         {item.thumbUrl && <img src={item.thumbUrl} alt="" draggable={false} />}
       </button>
       <span className="mt-tile-index">{index + 1}</span>
+      {pos === 'start' && shot && (
+        <span className="mt-shot-label" aria-hidden="true" data-testid="shot-label">{LAYOUT_LABELS[shot.layout]}</span>
+      )}
       {hasOverride && <span className="mt-tile-badge" title="Has per-photo overrides">custom</span>}
       {item.status !== 'ready' && (
         <span className="mt-tile-status" role={item.status === 'error' ? 'alert' : undefined}>
@@ -91,6 +108,28 @@ export function PhotoTray({ onFilesSelected }: PhotoTrayProps) {
   const selectedId = useMontageStore((s) => s.selectedId);
   const moveById = useMontageStore((s) => s.moveById);
   const shufflePhotos = useMontageStore((s) => s.shufflePhotos);
+  const shots = useShots();
+  const grouped = shots.some((m) => m.size > 1);
+  const gridRef = useRef<HTMLUListElement>(null);
+
+  // Mark the first/last tile of each wrapped grid row so a shot bracket split across rows gets proper ends.
+  useLayoutEffect(() => {
+    const ul = gridRef.current;
+    if (!ul) return;
+    const mark = () => {
+      const items = Array.from(ul.children) as HTMLElement[];
+      items.forEach((el, i) => {
+        const prev = items[i - 1];
+        const next = items[i + 1];
+        el.toggleAttribute('data-row-first', !prev || prev.offsetTop !== el.offsetTop);
+        el.toggleAttribute('data-row-last', !next || next.offsetTop !== el.offsetTop);
+      });
+    };
+    mark();
+    const ro = new ResizeObserver(mark);
+    ro.observe(ul);
+    return () => ro.disconnect();
+  }, [photos, shots]);
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [announce, setAnnounce] = useState('');
@@ -167,9 +206,9 @@ export function PhotoTray({ onFilesSelected }: PhotoTrayProps) {
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={photos.map((p) => p.source.id)} strategy={rectSortingStrategy}>
-              <ul className="mt-grid" aria-label="Photo order">
+              <ul ref={gridRef} className="mt-grid" aria-label="Photo order" data-grouped={grouped}>
                 {photos.map((p, i) => (
-                  <Tile key={p.source.id} item={p} index={i} selected={p.source.id === selectedId} />
+                  <Tile key={p.source.id} item={p} index={i} selected={p.source.id === selectedId} shot={shots[i]} />
                 ))}
               </ul>
             </SortableContext>
