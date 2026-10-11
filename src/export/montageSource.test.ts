@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../lib/constants';
-import type { ExportRequest, PhotoSource } from '../types';
+import type { ExportRequest, PhotoSource, Timeline } from '../types';
+import { shotTimeline } from './shotFixtures';
 
 interface FakeBitmap {
   index: number;
@@ -12,10 +13,23 @@ const created: FakeBitmap[] = [];
 /** resident[i] = bitmap currently set on the fake renderer for photo i */
 const resident = new Map<number, FakeBitmap>();
 const drawn: Array<{ t: number; resident: number[] }> = [];
+/** decode bounds requested per photo index */
+const decodeSizes = new Map<number, { maxW: number; maxH: number }>();
+/** photos per shot for the next buildTimeline() call; default = one photo per shot (v1) */
+let shotSizes: number[] | null = null;
+
+vi.mock('../engine', () => ({
+  buildTimeline: (photos: PhotoSource[], _o: unknown, settings: { totalDuration: number; fps: number }) => ({
+    ok: true,
+    timeline: shotTimeline(shotSizes ?? photos.map(() => 1), settings.totalDuration, 0.5, settings.fps),
+  }),
+  frameAt: (_tl: Timeline, t: number) => ({ time: t }),
+}));
 
 vi.mock('../ingest', () => ({
-  decodeSizeFor: () => ({ width: 8, height: 8 }),
-  decodePhoto: async (file: File) => {
+  decodeSizeFor: (out: { width: number; height: number }) => ({ maxW: out.width, maxH: out.height }),
+  decodePhoto: async (file: File, size: { maxW: number; maxH: number }) => {
+    decodeSizes.set(Number(file.name.replace(/\D/g, '')), size);
     await Promise.resolve();
     const bmp: FakeBitmap = {
       index: Number(file.name.replace(/\D/g, '')),
@@ -65,6 +79,8 @@ beforeEach(() => {
   created.length = 0;
   resident.clear();
   drawn.length = 0;
+  decodeSizes.clear();
+  shotSizes = null;
 });
 
 describe('createMontageSource residency and rewind', () => {
@@ -117,6 +133,31 @@ describe('createMontageSource residency and rewind', () => {
     await src.draw(0, 0);
     expect([...resident.keys()].every((i) => i <= 1)).toBe(true);
     expect(resident.has(0)).toBe(true);
+    src.dispose();
+    await flush();
+    expect(created.every((b) => b.closed)).toBe(true);
+  });
+
+  it('multi-photo shots: whole shots resident, decoded at cell size, released after passing', async () => {
+    shotSizes = [1, 4, 2, 1]; // photos 0 | 1 2 3 4 | 5 6 | 7 — slots of 2.5 s
+    const src = createMontageSource();
+    const progress: Array<[number, number]> = [];
+    await src.init({} as OffscreenCanvas, request(8), (d, t) => progress.push([d, t]));
+    // initial decode = photos of shots 0 and 1
+    expect(progress.at(-1)).toEqual([5, 5]);
+    expect([...resident.keys()].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect(decodeSizes.get(0)).toEqual({ maxW: 320, maxH: 240 });
+    expect(decodeSizes.get(1)).toEqual({ maxW: 160, maxH: 120 });
+
+    await src.draw(30, 3); // inside the quad: shots 0..2 resident
+    expect([...resident.keys()].sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(decodeSizes.get(5)).toEqual({ maxW: 160, maxH: 240 });
+
+    await src.draw(80, 8); // last shot: shots 2..3 resident, quad released
+    expect([...resident.keys()].sort()).toEqual([5, 6, 7]);
+    const quadBitmaps = created.filter((b) => b.index >= 1 && b.index <= 4);
+    expect(quadBitmaps.every((b) => b.closed)).toBe(true);
+
     src.dispose();
     await flush();
     expect(created.every((b) => b.closed)).toBe(true);
