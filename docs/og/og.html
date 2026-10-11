@@ -1,0 +1,140 @@
+<!doctype html>
+<!-- Source for og.png (1200×630 link-preview image). Render with docs/og/render.mjs. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=block"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f3f2f2;
+        --ink: #201e1d;
+        --muted: color-mix(in srgb, #201e1d 60%, transparent);
+        --rule: color-mix(in srgb, #201e1d 20%, transparent);
+        --accent: #ec3013;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+      }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: 'Archivo', system-ui, sans-serif;
+        font-variant-numeric: tabular-nums;
+        padding: 56px 64px 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 600;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        padding-bottom: 14px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .top span:last-child {
+        color: var(--muted);
+      }
+      h1 {
+        font-weight: 800;
+        font-size: 176px;
+        line-height: 0.9;
+        letter-spacing: -0.035em;
+        margin-top: 40px;
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+      h1 svg {
+        width: 104px;
+        height: 104px;
+        flex: none;
+        margin-top: 10px;
+      }
+      p {
+        font-size: 36px;
+        line-height: 1.2;
+        margin-top: 22px;
+        max-width: 900px;
+      }
+      p b {
+        font-weight: 800;
+      }
+      .strip {
+        margin-top: auto;
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        border-top: 1px solid var(--rule);
+        padding-top: 12px;
+      }
+      .frame {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .frame small {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .frame img {
+        display: block;
+        width: 100%;
+        height: 124px;
+        object-fit: cover;
+        object-position: center 35%;
+      }
+      .playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 46%;
+        width: 4px;
+        background: var(--accent);
+      }
+      .playhead::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -8px;
+        border: 10px solid transparent;
+        border-top: 12px solid var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top"><span>Photos → MP4</span><span>In your browser</span></div>
+    <h1>
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" fill="#201e1d" />
+        <path d="M11 8l13 8-13 8z" fill="#f3f2f2" />
+      </svg>
+      Montage
+    </h1>
+    <p>Turn your photos into an MP4 video. <b>No uploads.</b> Everything runs in your browser.</p>
+    <div class="strip">
+      <div class="frame"><small>01</small><img src="frames/01.jpg" alt="" /></div>
+      <div class="frame"><small>02</small><img src="frames/02.jpg" alt="" /></div>
+      <div class="frame"><small>03</small><img src="frames/03.jpg" alt="" /></div>
+      <div class="frame"><small>04</small><img src="frames/04.jpg" alt="" /></div>
+      <div class="frame"><small>05</small><img src="frames/05.jpg" alt="" /></div>
+      <div class="frame"><small>06</small><img src="frames/06.jpg" alt="" /></div>
+      <span class="playhead"></span>
+    </div>
+  </body>
+</html>
