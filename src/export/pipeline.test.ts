@@ -11,7 +11,7 @@ const request = {
   files: [],
   photos: [],
   overrides: {},
-  settings: { ...DEFAULT_SETTINGS, width: 320, height: 240, fps: FPS, totalDuration: TOTAL / FPS },
+  settings: { ...DEFAULT_SETTINGS, grouping: 'off', width: 320, height: 240, fps: FPS, totalDuration: TOTAL / FPS },
 } as unknown as ExportRequest;
 
 interface FakeFrame {

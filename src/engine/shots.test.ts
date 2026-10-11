@@ -21,6 +21,7 @@ import {
   motionTransforms,
   photosOf,
   timingSummary,
+  type CellPlacement,
   type GroupablePhoto,
 } from './index';
 
@@ -399,19 +400,80 @@ describe('layout rects (§4.7.2)', () => {
     expect(corners.size).toBe(4);
     expect(layoutCells('pip', 2, 1920, 1080, 0, 9, 3)).toEqual(layoutCells('pip', 2, 1920, 1080, 0, 9, 3));
   });
-  it('polaroid: 2–3 square cards ≈58% of the short side, tilted within ±8°, backdrop = first', () => {
+  it('polaroid: 2–3 square cards ≤58% of the short side, tilted within ±8°, backdrop = first', () => {
     for (const out of [LAND, PORT, SQUARE]) {
       for (const k of [2, 3]) {
         for (let key = 0; key < 20; key++) {
           const { cells, backdropCell } = layoutCells('polaroid', k, out.width, out.height, 0.04, 5, key);
           expect(cells).toHaveLength(k);
           expect(backdropCell).toBe(0);
+          const m = Math.min(out.width, out.height);
           for (const c of cells) {
             inUnit(c.rect);
             expect(c.border).toBe('polaroid');
             expect(Math.abs(c.rotation)).toBeLessThanOrEqual((8 * Math.PI) / 180 + 1e-12);
-            expect(c.rect.w * out.width).toBeCloseTo(0.58 * Math.min(out.width, out.height), 9);
-            expect(c.rect.h * out.height).toBeCloseTo(0.58 * Math.min(out.width, out.height), 9);
+            const side = c.rect.w * out.width;
+            expect(c.rect.h * out.height).toBeCloseTo(side, 9);
+            expect(side).toBeLessThanOrEqual(0.58 * m + 1e-9);
+            expect(side).toBeGreaterThanOrEqual(0.45 * m);
+          }
+        }
+      }
+    }
+    expect(layoutCells('polaroid', 3, 1080, 1920, 0, 9, 3)).toEqual(layoutCells('polaroid', 3, 1080, 1920, 0, 9, 3));
+  });
+
+  /** Card corners in pixels after rotation about the rect centre. */
+  const corners = (c: CellPlacement, W: number, H: number) => {
+    const cx = (c.rect.x + c.rect.w / 2) * W;
+    const cy = (c.rect.y + c.rect.h / 2) * H;
+    const hw = (c.rect.w * W) / 2;
+    const hh = (c.rect.h * H) / 2;
+    const cos = Math.cos(c.rotation);
+    const sin = Math.sin(c.rotation);
+    return [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(([u, v]) => [cx + u! * cos - v! * sin, cy + u! * sin + v! * cos] as const);
+  };
+  /** Is pixel point (x, y) inside the rotated card? */
+  const covers = (c: CellPlacement, W: number, H: number, x: number, y: number) => {
+    const cx = (c.rect.x + c.rect.w / 2) * W;
+    const cy = (c.rect.y + c.rect.h / 2) * H;
+    const dx = x - cx;
+    const dy = y - cy;
+    const u = dx * Math.cos(c.rotation) + dy * Math.sin(c.rotation);
+    const v = -dx * Math.sin(c.rotation) + dy * Math.cos(c.rotation);
+    return Math.abs(u) <= (c.rect.w * W) / 2 && Math.abs(v) <= (c.rect.h * H) / 2;
+  };
+
+  it('polaroid: tilted cards stay inside the frame and every back card shows ≥ 60%', () => {
+    const outs = [LAND, PORT, SQUARE, { width: 1440, height: 1080 }, { width: 1080, height: 1350 }, { width: 3840, height: 2160 }];
+    for (const out of outs) {
+      const { width: W, height: H } = out;
+      for (const k of [2, 3]) {
+        for (let key = 0; key < 40; key++) {
+          const { cells } = layoutCells('polaroid', k, W, H, 0, 11, key);
+          for (const c of cells) {
+            for (const [x, y] of corners(c, W, H)) {
+              expect(x).toBeGreaterThanOrEqual(-1e-6);
+              expect(x).toBeLessThanOrEqual(W + 1e-6);
+              expect(y).toBeGreaterThanOrEqual(-1e-6);
+              expect(y).toBeLessThanOrEqual(H + 1e-6);
+            }
+          }
+          // Cells are drawn back to front: sample each back card on a grid and count the points no later card covers.
+          for (let j = 0; j < k - 1; j++) {
+            const c = cells[j]!;
+            const N = 40;
+            let visible = 0;
+            for (let a = 0; a < N; a++) {
+              for (let b = 0; b < N; b++) {
+                const u = ((a + 0.5) / N - 0.5) * c.rect.w * W;
+                const v = ((b + 0.5) / N - 0.5) * c.rect.h * H;
+                const x = (c.rect.x + c.rect.w / 2) * W + u * Math.cos(c.rotation) - v * Math.sin(c.rotation);
+                const y = (c.rect.y + c.rect.h / 2) * H + u * Math.sin(c.rotation) + v * Math.cos(c.rotation);
+                if (!cells.slice(j + 1).some((d) => covers(d, W, H, x, y))) visible++;
+              }
+            }
+            expect(visible / (N * N), `${W}x${H} k=${k} key=${key} card ${j}`).toBeGreaterThanOrEqual(0.6);
           }
         }
       }
@@ -631,8 +693,8 @@ describe('helpers', () => {
   });
   it('too-many check uses shots', () => {
     const forty = set('L'.repeat(40));
-    expect(buildTimeline(forty, {}, S({ totalDuration: 10 })).ok).toBe(true);
-    const r = buildTimeline(set('L'.repeat(41)), {}, S({ totalDuration: 10 }));
+    expect(buildTimeline(forty, {}, S({ grouping: 'off', totalDuration: 10 })).ok).toBe(true);
+    const r = buildTimeline(set('L'.repeat(41)), {}, S({ grouping: 'off', totalDuration: 10 }));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/^Too many photos/);
     // 44 portraits in 16:9 → 22 duos: fits.

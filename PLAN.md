@@ -263,8 +263,8 @@ Given N photos, total `L`:
 
 ### 4.10 Multi-photo shots (contract v2)
 Full spec: `docs/proposals/multi-photo-shots.md` §3–§4 (grouping, layout rects, timing, stagger, cell
-motion/fit, rendering, residency, UI). Decisions: default `grouping: 'off'` (output identical to v1; flip to
-`'auto'` after T16 passes); multi-cell shots force `cover` unless a per-photo `fit` override exists;
+motion/fit, rendering, residency, UI). Decisions: default `grouping: 'auto'` (flipped from `'off'` once T16
+passed; `'off'` still gives output identical to v1); multi-cell shots force `cover` unless a per-photo `fit` override exists;
 looping (§4.9) works per shot: the wrap runs from the last shot into shot 0, shot 0 starts at −wrap, and a
 staggered shot 0 reveals its later cells only after the seam;
 `transitionIn` on a non-first photo of a shot is ignored; `mixed` uses a fixed p = 0.35.

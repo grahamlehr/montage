@@ -83,7 +83,7 @@ function request(n: number, loop = false): ExportRequest {
     files: photos.map((p) => p.file),
     photos,
     overrides: {},
-    settings: { ...DEFAULT_SETTINGS, width: 320, height: 240, fps: 30, totalDuration: 10, loop },
+    settings: { ...DEFAULT_SETTINGS, grouping: 'off', width: 320, height: 240, fps: 30, totalDuration: 10, loop },
   };
 }
 
