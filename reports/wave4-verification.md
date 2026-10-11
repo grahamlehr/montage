@@ -24,7 +24,7 @@ Evidence in `tmp/t16/` (gitignored). Run config `tmp/t16/playwright.config.ts` u
 - Transitions into and out of collage shots (crossfade, wipe, push, zoom, slide) look right. As specified, the incoming shot shows only cell 0 during the transition, and the remaining cells reveal afterwards.
 
 ## Findings (by severity)
-1. **minor (test infra, not product)**: `playwright.config.ts` uses `reuseExistingServer` on the fixed port :5173. When another worktree's dev server holds that port (here the leftover t15-ui server), `npm run test:e2e` silently tests that worktree's code. The first baseline run did exactly that, against t15-ui. **CONTRACT REQUEST (orchestrator):** make the port configurable (e.g. `E2E_PORT`) or set `reuseExistingServer: false`, and wire `MONTAGE_MAIN_URL` into CI if the identity spec should run there.
+1. **minor (test infra, not product), FIXED in b7cf42b**: `playwright.config.ts` uses `reuseExistingServer` on the fixed port :5173. When another worktree's dev server holds that port (here the leftover t15-ui server), `npm run test:e2e` silently tests that worktree's code. The first baseline run did exactly that, against t15-ui. **CONTRACT REQUEST (orchestrator):** make the port configurable (e.g. `E2E_PORT`) or set `reuseExistingServer: false`, and wire `MONTAGE_MAIN_URL` into CI if the identity spec should run there.
 2. **cosmetic**: in the polaroid stack the cards overlap heavily, especially in portrait output, so only about 30-40% of the back cards shows (`tmp/t16/polaroid-portrait-hold.png`). The cause is the fan spread in `src/engine/layouts.ts`. Consider a wider spread.
 3. **note**: while revealing, a staggered cell slides up by its 6% y-offset and briefly overlaps the area of the cell below it (a +0.3 luma bump in the neighbouring crop). This matches spec §4.7.5. It is not clipped to the rect, which is expected.
 4. **note**: `auto` pairs the very first photo when both photo 1 and photo 2 are mismatched. The "first/last stay solo" rule applies only to `mixed`'s random groups (spec §4.7.1 step 3 runs before step 4). This is consistent with the spec.
@@ -35,4 +35,13 @@ No blocker or major product findings.
 **GO**: merge `claude/multi-photo-shots` to main. `'off'` is byte-identical to main, and auto, mixed, stagger, the overrides and 4K memory all pass. Finding 1 should be fixed in config but does not block.
 
 ## How to rerun
-`npx playwright test -c tmp/t16/playwright.config.ts` (the config file is local to tmp/). For the identity spec, also start a detached worktree of main with `npx vite --port 5174` and set `MONTAGE_MAIN_URL=http://localhost:5174`.
+`npx playwright test` now starts its own server on port 5199 (`E2E_PORT` overrides it), and `E2E_REUSE_SERVER=1` opts in to reusing a running server. Add `E2E_FULL=1` for the design-load spec. For the identity spec, start a detached worktree of main with `npx vite --port 5174` and set `MONTAGE_MAIN_URL=http://localhost:5174`.
+
+## Re-verification after merging main (b7cf42b, orchestrator)
+`origin/main` at 7ea265b (seamless loop #26 and six transitions #27) was merged in. Looping is now per shot: the wrap goes from the last shot into shot 0, and a staggered shot 0 reveals its later cells after the seam.
+- Unit: 222/222 pass. The loop tests are ported to shots: the v1 golden is compared through an adapter, and new seam-continuity tests cover auto/mixed × together/stagger. Typecheck 0 errors, lint clean.
+- E2E (Chrome 155, port 5199, own server): 19/19 pass, including design load with `E2E_FULL=1` (8.6 s) and the loop seam spec.
+- `'off'` identity vs new main (default `loop: true` on both sides): cover, contain and blur each have 300 frames, 0 differ, PSNR = inf.
+- Perf at 3840×2160 with 40 photos: off 15.2 s, mixed quad 15.3 s, all-quad 15.3 s, hardware encoder, no context loss.
+
+**GO** still stands.
