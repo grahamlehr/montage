@@ -23,3 +23,10 @@ body { margin: 0; background: #0f1014; color: #e7e9ee; font: 13px/1.4 system-ui,
 .app-status { color: #c4c8d2; }
 .app-result { color: #7fd99a; font-weight: 600; }
 .app-validation { color: #ff6b6b; background: #3a1f24; border: 1px solid #6a2b33; border-radius: 6px; padding: 6px 10px; }
+.app-notice { max-width: min(440px, calc(100vw - 32px)); box-sizing: border-box; padding: 20px 22px; color: #e7e9ee; background: #1c1e25; border: 1px solid #343844; border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+.app-notice::backdrop { background: rgba(8, 9, 11, .6); }
+.app-notice h2 { font-size: 16px; margin: 0 0 10px; }
+.app-notice p { margin: 0 0 10px; color: #c4c8d2; }
+.app-notice form { display: flex; justify-content: flex-end; margin-top: 16px; }
+/* On phones the three-column app is wider than the screen, so centring would push the notice off-screen. */
+@media (max-width: 480px) { .app-notice { margin-inline: 16px auto; } }

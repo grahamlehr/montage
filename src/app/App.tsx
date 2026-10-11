@@ -4,6 +4,7 @@ import { fitsEncoderArea } from '../lib/constants';
 import { preflightEncoder, unsupportedSizeMessage } from '../export';
 import { PerPhotoInspector, PhotoTray, SettingsPanel, useMontageStore } from '../ui';
 import type { ExportRequest, Timeline } from '../types';
+import { BrowserNotice } from './BrowserNotice';
 import { ExportBar } from './ExportBar';
 import type { ExportState } from './ExportBar';
 import { PreviewPlayer } from './PreviewPlayer';
@@ -88,6 +89,7 @@ export function App() {
 
   return (
     <div className="app-shell">
+      <BrowserNotice />
       <header className="app-header">
         <h1>Montage</h1>
         <span className="app-tagline">Photos to MP4, entirely in your browser.</span>
