@@ -194,9 +194,10 @@ export function layoutShot(layout: MultiLayout, W: number, H: number, reveal: nu
     }
     case 'polaroid': {
       const short = Math.min(W, H);
-      const cw = 0.58 * short * 0.9;
-      const ch = 0.58 * short;
-      const spread = 0.2 * short;
+      // Square cards 58% of the short side, fanned along the long axis in steps of 0.7 card (§4.7.2).
+      const cw = 0.58 * short;
+      const ch = cw;
+      const spread = 0.7 * cw;
       const offs = [-spread, 0, spread];
       const rots = [-0.12, 0.05, 0.13];
       return {
