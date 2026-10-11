@@ -33,6 +33,7 @@ export interface MontageState {
   applyPreset(preset: Pick<DimensionPreset, 'width' | 'height'>): void;
   toggleMotion(style: MontageSettings['motionPool'][number]): void;
   toggleTransition(style: MontageSettings['transitionPool'][number]): void;
+  toggleLayout(style: MontageSettings['layoutPool'][number]): void;
   /** Merge a patch; `undefined` value removes that key; passing `undefined` clears all overrides. */
   setOverride(id: string, partial: Partial<Record<keyof PhotoOverrides, PhotoOverrides[keyof PhotoOverrides] | undefined>> | undefined): void;
   clearOverride(id: string): void;
@@ -118,6 +119,8 @@ export const useMontageStore = create<MontageState>()((set, get) => ({
     set((s) => ({ settings: applySettingsPatch(s.settings, { motionPool: togglePool(s.settings.motionPool, style) }, false) })),
   toggleTransition: (style) =>
     set((s) => ({ settings: applySettingsPatch(s.settings, { transitionPool: togglePool(s.settings.transitionPool, style) }, false) })),
+  toggleLayout: (style) =>
+    set((s) => ({ settings: applySettingsPatch(s.settings, { layoutPool: togglePool(s.settings.layoutPool, style) }, false) })),
   setOverride: (id, partial) =>
     set((s) => {
       const overrides = { ...s.overrides };

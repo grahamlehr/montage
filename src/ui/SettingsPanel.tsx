@@ -1,9 +1,11 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { DURATION_MAX, DURATION_MIN, estimateFileBytes } from '../lib/constants';
+import { DURATION_MAX, DURATION_MIN, GUTTER_MAX, estimateFileBytes } from '../lib/constants';
+import { timingSummary } from './engineShim';
 import {
-  DIMENSION_PRESETS, FIT_MODES, FPS_OPTIONS, MOTION_STYLES, QUALITIES, STYLE_LABELS, TRANSITION_STYLES,
-  estimateTiming, formatBytes, formatRatio, formatSeconds,
+  DIMENSION_PRESETS, FIT_MODES, FPS_OPTIONS, GROUPINGS, GROUPING_HINTS, GROUPING_LABELS, LAYOUT_LABELS, MOTION_STYLES,
+  MULTI_LAYOUTS, QUALITIES, STYLE_LABELS, TRANSITION_STYLES, estimateTiming, formatBytes, formatRatio, formatSeconds,
+  shotSummaryText,
 } from './logic';
 import type { TimingEstimate } from './logic';
 import { useMontageStore } from './store';
@@ -11,7 +13,7 @@ import type { MontageSettings } from '../types';
 import './ui.css';
 
 export interface SettingsPanelProps {
-  /** Derived timing from the engine; falls back to a local estimate when absent. */
+  /** Derived timing from the engine's `timingSummary()`; computed locally when absent. */
   timing?: TimingEstimate | null;
   validationError?: string | null;
 }
@@ -66,14 +68,15 @@ function RatioField() {
   );
 }
 
-function Slider({ label, valueText, name, value, onChange, lowLabel, highLabel }: {
+function Slider({ label, valueText, name, value, onChange, lowLabel, highLabel, min = 0, max = 1, step = 0.01, disabled }: {
   label: string; valueText: string; name: string; value: number; onChange(v: number): void; lowLabel: string; highLabel: string;
+  min?: number; max?: number; step?: number; disabled?: boolean;
 }) {
   const id = useId();
   return (
-    <div className="mt-field">
+    <div className="mt-field" data-disabled={disabled || undefined}>
       <label htmlFor={id}>{label}: <span className="mt-value" data-testid={`${name}-value`}>{valueText}</span></label>
-      <input id={id} className="mt-slider" type="range" min={0} max={1} step={0.01} value={value}
+      <input id={id} className="mt-slider" type="range" min={min} max={max} step={step} value={value} disabled={disabled}
         data-testid={`${name}-slider`} aria-valuetext={valueText}
         onChange={(e) => onChange(Number(e.target.value))} />
       <div className="mt-slider-ends" aria-hidden="true"><span>{lowLabel}</span><span>{highLabel}</span></div>
@@ -89,17 +92,19 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
   const s = useMontageStore((st) => st.settings);
   const aspectLocked = useMontageStore((st) => st.aspectLocked);
   const areaNote = useMontageStore((st) => st.areaNote);
-  const photoCount = useMontageStore((st) => st.photos.length);
+  const photos = useMontageStore((st) => st.photos);
   const setSettings = useMontageStore((st) => st.setSettings);
   const setAspectLocked = useMontageStore((st) => st.setAspectLocked);
   const applyPreset = useMontageStore((st) => st.applyPreset);
   const toggleMotion = useMontageStore((st) => st.toggleMotion);
   const toggleTransition = useMontageStore((st) => st.toggleTransition);
+  const toggleLayout = useMontageStore((st) => st.toggleLayout);
   const randomiseSeed = useMontageStore((st) => st.randomiseSeed);
 
-  const t = timing ?? estimateTiming(s, photoCount);
+  const t = timing ?? (photos.length ? timingSummary(photos.map((p) => p.source), s) : estimateTiming(s, 0));
   const transitionText = formatSeconds(t.transition);
-  const pacingText = `Avg ${formatSeconds(t.avgPhoto)} / photo`;
+  const pacingText = shotSummaryText(t);
+  const groupingOff = s.grouping === 'off';
   const motionText = `${Math.round(s.motionIntensity * 100)}%`;
   const bytes = estimateFileBytes(s);
 
@@ -158,7 +163,7 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
         value={s.motionIntensity} onChange={(v) => setSettings({ motionIntensity: v })} lowLabel="Static" highLabel="Strong" />
       <Slider name="pacing" label="Pacing" valueText={pacingText}
         value={s.pacing} onChange={(v) => setSettings({ pacing: v })} lowLabel="Even" highLabel="Dynamic" />
-      <div className="mt-muted" data-testid="timing-detail">Shortest photo about {formatSeconds(t.minPhoto)}</div>
+      <div className="mt-muted" data-testid="timing-detail">Shortest shot about {formatSeconds(t.minShot)}</div>
 
       <h3>Motion styles (at least one)</h3>
       <Group label="Motion styles">
@@ -190,6 +195,46 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
           </div>
           <button type="button" className="mt-btn" onClick={randomiseSeed} title={`Seed ${s.seed}`}>Randomise</button>
           <span className="mt-muted" data-testid="seed-value">seed {s.seed}</span>
+        </div>
+      </div>
+
+      <h3>Layouts</h3>
+      <div className="mt-field">
+        <span className="mt-label" id="set-grouping-label">Grouping</span>
+        <div role="radiogroup" aria-labelledby="set-grouping-label" aria-describedby="set-grouping-hint" className="mt-segmented">
+          {GROUPINGS.map((g) => (
+            <button key={g} type="button" role="radio" aria-checked={s.grouping === g} className="mt-chip"
+              title={GROUPING_HINTS[g]} data-testid={`grouping-${g}`}
+              onClick={() => setSettings({ grouping: g })}>{GROUPING_LABELS[g]}</button>
+          ))}
+        </div>
+        <span id="set-grouping-hint" className="mt-muted mt-hint" data-testid="grouping-hint">{GROUPING_HINTS[s.grouping]}</span>
+      </div>
+      {s.grouping === 'mixed' && (
+        <div className="mt-field">
+          <span className="mt-label">Layouts (at least one)</span>
+          <Group label="Layouts">
+            <div className="mt-pool">
+              {MULTI_LAYOUTS.map((l) => (
+                <button key={l} type="button" className="mt-chip" aria-pressed={s.layoutPool.includes(l)}
+                  data-testid={`layout-${l}`} onClick={() => toggleLayout(l)}>{LAYOUT_LABELS[l]}</button>
+              ))}
+            </div>
+          </Group>
+        </div>
+      )}
+      <Slider name="gutter" label="Gutter" valueText={`${(s.gutter * 100).toFixed(1)}%`}
+        value={s.gutter} min={0} max={GUTTER_MAX} step={0.001} disabled={groupingOff}
+        onChange={(v) => setSettings({ gutter: v })} lowLabel="None" highLabel="Wide" />
+      <div className="mt-field" data-disabled={groupingOff || undefined}>
+        <span className="mt-label" id="set-reveal-label">Reveal</span>
+        <div role="radiogroup" aria-labelledby="set-reveal-label" className="mt-segmented">
+          {(['together', 'stagger'] as const).map((r) => (
+            <button key={r} type="button" role="radio" aria-checked={s.reveal === r} className="mt-chip"
+              disabled={groupingOff} data-testid={`reveal-${r}`}
+              title={r === 'together' ? 'All photos in a shot appear at once' : 'Photos in a shot pop in one after another'}
+              onClick={() => setSettings({ reveal: r })}>{r === 'together' ? 'Together' : 'Stagger'}</button>
+          ))}
         </div>
       </div>
 
