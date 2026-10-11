@@ -1,0 +1,184 @@
+/*
+ * Montage theme: the Modernist / CueSmith "Show language" design system
+ * (CueSmith_Frontend Design_Framework, modernist styles.css + readme.md).
+ * Tokens are copied verbatim; everything else in the app consumes them via var().
+ *
+ * Invariants kept here:
+ * - Archivo only (400 / 600 / 800), self-hosted via @fontsource; no third-party font request.
+ * - Zero corner radius; structure comes from rules, not boxes or shadows.
+ * - One red means now: --color-accent is reserved for the Export (GO) action, export in progress,
+ *   and urgent errors. Everything else is neutral ink on ground.
+ * - Numbers use tabular figures.
+ * - Daylight by default, Backstage (dark) when the OS asks for it or data-theme="dark" is set.
+ */
+
+:root {
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201e1d;
+  --color-accent: #ec3013;
+  --color-divider: color-mix(in srgb, #201e1d 20%, transparent);
+
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff2ef;
+  --color-accent-200: #ffe0d9;
+  --color-accent-300: #ffc4b8;
+  --color-accent-400: #ff9783;
+  --color-accent-500: #ff563c;
+  --color-accent-600: #dd2b0f;
+  --color-accent-700: #ae1800;
+  --color-accent-800: #7c1405;
+  --color-accent-900: #4d170e;
+
+  --font-heading: 'Archivo', system-ui, sans-serif;
+  --font-heading-weight: 800;
+  --font-body: 'Archivo', system-ui, sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 10%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 12%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 16%, transparent);
+
+  /* Show-language extension layer (Daylight). */
+  color-scheme: light;
+  --cs-bg: var(--color-bg);
+  --cs-surface: var(--color-surface);
+  --cs-text: var(--color-text);
+  --cs-muted: color-mix(in srgb, var(--color-text) 60%, transparent);
+  --cs-rule: color-mix(in srgb, var(--color-text) 12%, transparent);
+  --cs-strong: color-mix(in srgb, var(--color-text) 22%, transparent);
+  --cs-select-tint: color-mix(in srgb, var(--color-text) 5%, var(--color-bg));
+  --cs-live-bg: var(--color-accent);
+  --cs-live-text: #ffffff;
+  --cs-stby-bg: #f5eedf;
+  --cs-accent-text: var(--color-accent-700);
+  --cs-signal-go: oklch(0.62 0.14 150);
+
+  /* Montage roles, derived from the tokens above. */
+  --mt-hover: color-mix(in srgb, var(--color-text) 7%, transparent);
+  --mt-press: color-mix(in srgb, var(--color-text) 14%, transparent);
+  --mt-urgent-bg: var(--color-accent-100);
+  --mt-urgent-text: var(--color-accent-800);
+  --mt-stage: var(--color-text);
+  --mt-stage-text: color-mix(in srgb, var(--color-bg) 65%, transparent);
+}
+
+/* Backstage (dark): system preference unless the page pins data-theme="day". */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='day']) {
+    color-scheme: dark;
+    --color-bg: #161514;
+    --color-surface: #201e1d;
+    --color-text: #f3f2f2;
+    --color-divider: rgba(243, 242, 242, 0.2);
+    --cs-bg: #161514;
+    --cs-surface: #201e1d;
+    --cs-text: #f3f2f2;
+    --cs-muted: rgba(243, 242, 242, 0.62);
+    --cs-rule: rgba(243, 242, 242, 0.12);
+    --cs-strong: rgba(243, 242, 242, 0.22);
+    --cs-select-tint: rgba(255, 255, 255, 0.06);
+    --cs-stby-bg: #33271a;
+    --cs-accent-text: var(--color-accent-400);
+    --mt-urgent-bg: var(--color-accent-900);
+    --mt-urgent-text: var(--color-accent-300);
+    --mt-stage: #0c0b0b;
+    --mt-stage-text: var(--cs-muted);
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #161514;
+  --color-surface: #201e1d;
+  --color-text: #f3f2f2;
+  --color-divider: rgba(243, 242, 242, 0.2);
+  --cs-bg: #161514;
+  --cs-surface: #201e1d;
+  --cs-text: #f3f2f2;
+  --cs-muted: rgba(243, 242, 242, 0.62);
+  --cs-rule: rgba(243, 242, 242, 0.12);
+  --cs-strong: rgba(243, 242, 242, 0.22);
+  --cs-select-tint: rgba(255, 255, 255, 0.06);
+  --cs-stby-bg: #33271a;
+  --cs-accent-text: var(--color-accent-400);
+  --mt-urgent-bg: var(--color-accent-900);
+  --mt-urgent-text: var(--color-accent-300);
+  --mt-stage: #0c0b0b;
+  --mt-stage-text: var(--cs-muted);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.6;
+  font-weight: 400;
+  /* Every time, size, duration and counter in the UI is numeric: keep digits from shifting width. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+a {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+::selection {
+  background: color-mix(in srgb, var(--color-text) 18%, transparent);
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+.tn {
+  font-variant-numeric: tabular-nums;
+}

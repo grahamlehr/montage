@@ -88,6 +88,17 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
   return <div role="group" aria-label={label}>{children}</div>;
 }
 
+/** Lucide `lock` / `lock-open` (ISC), inline on currentColor. */
+function LockIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="square" strokeLinejoin="miter" aria-hidden="true">
+      <rect x="3" y="11" width="18" height="11" />
+      <path d={open ? 'M7 11V7a5 5 0 0 1 9.9-1' : 'M7 11V7a5 5 0 0 1 10 0v4'} />
+    </svg>
+  );
+}
+
 export function SettingsPanel({ timing, validationError }: SettingsPanelProps = {}) {
   const s = useMontageStore((st) => st.settings);
   const aspectLocked = useMontageStore((st) => st.aspectLocked);
@@ -135,7 +146,7 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
           <NumberField id="set-height" label="Height" value={s.height} min={128} max={4096} step={2} onCommit={(v) => setSettings({ height: v })} />
           <button type="button" className="mt-btn mt-lock" aria-pressed={aspectLocked}
             aria-label="Lock aspect ratio" title={aspectLocked ? 'Aspect ratio locked' : 'Aspect ratio unlocked'}
-            onClick={() => setAspectLocked(!aspectLocked)}>{aspectLocked ? '🔒' : '🔓'}</button>
+            onClick={() => setAspectLocked(!aspectLocked)}><LockIcon open={!aspectLocked} /></button>
           <RatioField />
         </div>
         {areaNote && (

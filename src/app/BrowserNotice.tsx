@@ -50,7 +50,7 @@ export function BrowserNotice() {
       </p>
       <p>You can still try it.</p>
       <form method="dialog">
-        <button className="app-btn app-primary" data-testid="browser-notice-dismiss" autoFocus>
+        <button className="app-btn app-ink" data-testid="browser-notice-dismiss" autoFocus>
           Continue anyway
         </button>
       </form>
