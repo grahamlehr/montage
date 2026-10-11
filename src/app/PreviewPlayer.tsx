@@ -3,6 +3,7 @@ import type { MontageSettings, PhotoSource, Timeline } from '../types';
 import { PreviewEngine } from './previewEngine';
 import type { PreviewStats } from './previewEngine';
 import { formatClock } from './formatClock';
+import { useMontageStore } from '../ui';
 
 export interface PreviewPlayerProps {
   timeline: Timeline | null;
@@ -19,7 +20,8 @@ export function PreviewPlayer({ timeline, photos, settings, suspended, statsRef 
   const engineRef = useRef<PreviewEngine | null>(null);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [loop, setLoop] = useState(true);
+  const loop = settings.loop;
+  const setSettings = useMontageStore((s) => s.setSettings);
 
   useEffect(() => {
     // A disposed renderer loses its GL context for good, so every engine gets a fresh canvas
@@ -105,12 +107,16 @@ export function PreviewPlayer({ timeline, photos, settings, suspended, statsRef 
         <span className="app-time" data-testid="preview-time">
           {formatClock(time)} / {formatClock(duration)}
         </span>
-        <label className="app-loop">
+        <label
+          className="app-loop"
+          title="Seamless loop: the video ends by transitioning back to the first photo"
+        >
           <input
             type="checkbox"
             data-testid="loop-toggle"
+            aria-description="Seamless loop: the video ends by transitioning back to the first photo"
             checked={loop}
-            onChange={(e) => setLoop(e.target.checked)}
+            onChange={(e) => setSettings({ loop: e.target.checked })}
           />{' '}
           Loop
         </label>

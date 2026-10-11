@@ -238,6 +238,7 @@ export function applySettingsPatchDetailed(
   if (finite(patch.seed)) next.seed = Math.floor(patch.seed) >>> 0;
   if (patch.fit && FIT_MODES.includes(patch.fit)) next.fit = patch.fit;
   if (typeof patch.background === 'string' && isHexColour(patch.background)) next.background = patch.background.toLowerCase();
+  if (typeof patch.loop === 'boolean') next.loop = patch.loop;
   if (patch.quality && (QUALITIES as readonly string[]).includes(patch.quality)) next.quality = patch.quality;
   return { settings: next, areaClamp };
 }
@@ -288,11 +289,12 @@ export interface TimingEstimate {
 /** Local fallback estimate (§4.1) used when the engine's timing isn't injected. */
 export function estimateTiming(s: MontageSettings, photoCount: number): TimingEstimate {
   const n = Math.max(1, photoCount);
-  let transition = n <= 1 ? 0 : TRANSITION_SLOW + (TRANSITION_FAST - TRANSITION_SLOW) * s.transitionSpeed;
-  let avgPhoto = (s.totalDuration + (n - 1) * transition) / n;
+  const count = s.loop ? n : n - 1; // a seamless loop adds the wrap transition (§4.9)
+  let transition = count <= 0 ? 0 : TRANSITION_SLOW + (TRANSITION_FAST - TRANSITION_SLOW) * s.transitionSpeed;
+  let avgPhoto = (s.totalDuration + count * transition) / n;
   if (transition > 0.45 * avgPhoto) {
     // transitions are clamped to 45% of the photo duration (§4.1 step 4)
-    avgPhoto = s.totalDuration / (n - 0.45 * (n - 1));
+    avgPhoto = s.totalDuration / (n - 0.45 * count);
     transition = 0.45 * avgPhoto;
   }
   const minPhoto = avgPhoto * (1 - 0.6 * s.pacing);

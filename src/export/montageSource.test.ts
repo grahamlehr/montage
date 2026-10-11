@@ -11,7 +11,7 @@ interface FakeBitmap {
 const created: FakeBitmap[] = [];
 /** resident[i] = bitmap currently set on the fake renderer for photo i */
 const resident = new Map<number, FakeBitmap>();
-const drawn: Array<{ t: number; resident: number[] }> = [];
+const drawn: Array<{ t: number; resident: number[]; photos: number[] }> = [];
 
 vi.mock('../ingest', () => ({
   decodeSizeFor: () => ({ width: 8, height: 8 }),
@@ -37,8 +37,9 @@ vi.mock('../render', () => ({
       if (bmp) resident.set(i, bmp);
       else resident.delete(i);
     },
-    draw(frame: { time?: number }) {
-      drawn.push({ t: frame.time ?? -1, resident: [...resident.keys()].sort((a, b) => a - b) });
+    draw(frame: { kind: string; layer?: { photoIndex: number }; from?: { photoIndex: number }; to?: { photoIndex: number } }) {
+      const photos = frame.kind === 'single' ? [frame.layer!.photoIndex] : [frame.from!.photoIndex, frame.to!.photoIndex];
+      drawn.push({ t: -1, resident: [...resident.keys()].sort((a, b) => a - b), photos });
     },
     dispose() {},
   }),
@@ -48,7 +49,7 @@ const { createMontageSource } = await import('./montageSource');
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
-function request(n: number): ExportRequest {
+function request(n: number, loop = false): ExportRequest {
   const photos: PhotoSource[] = Array.from({ length: n }, (_, i) => {
     const file = new File([''], `p${i}.jpg`);
     return { id: `p${i}`, file, name: file.name, naturalWidth: 400, naturalHeight: 300 };
@@ -57,7 +58,7 @@ function request(n: number): ExportRequest {
     files: photos.map((p) => p.file),
     photos,
     overrides: {},
-    settings: { ...DEFAULT_SETTINGS, width: 320, height: 240, fps: 30, totalDuration: 10 },
+    settings: { ...DEFAULT_SETTINGS, width: 320, height: 240, fps: 30, totalDuration: 10, loop },
   };
 }
 
@@ -120,5 +121,38 @@ describe('createMontageSource residency and rewind', () => {
     src.dispose();
     await flush();
     expect(created.every((b) => b.closed)).toBe(true);
+  });
+});
+
+describe('createMontageSource with a seamless loop (§4.9)', () => {
+  it('every drawn frame has its photos resident and live, including the wrap back to photo 0', async () => {
+    for (const n of [1, 2, 3, 6]) {
+      created.length = 0;
+      resident.clear();
+      drawn.length = 0;
+      const src = createMontageSource();
+      await src.init({} as OffscreenCanvas, request(n, true), () => undefined);
+      const frames = 300; // 10 s @ 30 fps
+      for (let i = 0; i < frames; i++) {
+        await src.draw(i, i / 30);
+        expect(resident.size).toBeLessThanOrEqual(3);
+        const d = drawn.at(-1)!;
+        for (const p of d.photos) {
+          expect(d.resident).toContain(p);
+          expect(resident.get(p)?.closed).toBe(false);
+        }
+      }
+      // the final frames are a transition from the last photo into photo 0
+      const tail = drawn.at(-1)!;
+      expect(tail.photos).toEqual([n - 1, 0]);
+      // the start of the video is a plain single frame of photo 0 and does not need the last photo
+      expect(drawn[0]!.photos).toEqual([0]);
+      // rewind (encoder retry) restarts cleanly
+      await src.draw(0, 0);
+      expect(resident.get(0)?.closed).toBe(false);
+      src.dispose();
+      await flush();
+      expect(created.every((b) => b.closed)).toBe(true);
+    }
   });
 });

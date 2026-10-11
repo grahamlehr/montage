@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS: MontageSettings = {
   fit: 'blur',
   background: '#000000',
   quality: 'high',
+  loop: true,
 };
 
 /** Round to the nearest even integer within [DIM_MIN, DIM_MAX]. */

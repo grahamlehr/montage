@@ -10,6 +10,7 @@ export function PerPhotoInspector() {
   const selectedId = useMontageStore((s) => s.selectedId);
   const photos = useMontageStore((s) => s.photos);
   const override = useMontageStore((s) => (s.selectedId ? s.overrides[s.selectedId] : undefined));
+  const loop = useMontageStore((s) => s.settings.loop);
   const setOverride = useMontageStore((s) => s.setOverride);
   const clearOverride = useMontageStore((s) => s.clearOverride);
 
@@ -59,8 +60,8 @@ export function PerPhotoInspector() {
         </select>
       </div>
       <div className="mt-field">
-        <label htmlFor="insp-transition">Transition in{index === 0 ? ' (not used for the first photo)' : ''}</label>
-        <select id="insp-transition" className="mt-select" disabled={index === 0} value={index === 0 ? DEFAULT : (override?.transitionIn ?? DEFAULT)}
+        <label htmlFor="insp-transition">Transition in{index === 0 ? (loop ? ' (used for the loop back to this photo)' : ' (not used for the first photo)') : ''}</label>
+        <select id="insp-transition" className="mt-select" disabled={index === 0 && !loop} value={index === 0 && !loop ? DEFAULT : (override?.transitionIn ?? DEFAULT)}
           onChange={(e) => setOverride(id, { transitionIn: (e.target.value || undefined) as TransitionStyle | undefined })}>
           <option value={DEFAULT}>Use default</option>
           {TRANSITION_STYLES.map((m) => <option key={m} value={m}>{STYLE_LABELS[m]}</option>)}

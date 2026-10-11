@@ -178,7 +178,8 @@ export class PreviewEngine {
     const out: number[] = [];
     const push = (i: number) => {
       let k = i;
-      if (this.loop) k = ((i % n) + n) % n;
+      // On a looping timeline the last segment's next photo is photo 0 (the wrap, §4.9).
+      if (this.timeline?.loop) k = ((i % n) + n) % n;
       if (k >= 0 && k < n && !out.includes(k)) out.push(k);
     };
     push(cur);

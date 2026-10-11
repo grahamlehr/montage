@@ -6,6 +6,8 @@ export interface ResolvedStyles {
   motions: MotionStyle[];
   /** Transition INTO photo i; index 0 is always null. */
   transitions: Array<TransitionStyle | null>;
+  /** Wrap transition (last photo → photo 0), only when `settings.loop`; otherwise null (§4.9). */
+  wrap: TransitionStyle | null;
 }
 
 function dedupe<T>(items: readonly T[]): T[] {
@@ -20,7 +22,7 @@ function dedupe<T>(items: readonly T[]): T[] {
 export function resolveStyles(
   photos: ReadonlyArray<Pick<PhotoSource, 'id'>>,
   overrides: Record<string, PhotoOverrides>,
-  settings: Pick<MontageSettings, 'motionPool' | 'transitionPool' | 'selection' | 'seed'>,
+  settings: Pick<MontageSettings, 'motionPool' | 'transitionPool' | 'selection' | 'seed'> & { loop?: boolean },
 ): ResolvedStyles {
   const motionPool = dedupe(settings.motionPool.length ? settings.motionPool : DEFAULT_SETTINGS.motionPool);
   const transPool = dedupe(
@@ -37,7 +39,16 @@ export function resolveStyles(
       i === 0 ? null : (ov?.transitionIn ?? choose(transPool, i - 1, i, transitions[i - 1] ?? undefined, settings, 'transition')),
     );
   });
-  return { motions, transitions };
+  let wrap: TransitionStyle | null = null;
+  const n = photos.length;
+  if (settings.loop && n > 0) {
+    // Photo 0's override applies to the wrap; otherwise the next pool entry after the last photo's.
+    // Random uses photo index `n` so its stream never collides with a real transition.
+    wrap =
+      overrides[(photos[0] as Pick<PhotoSource, 'id'>).id]?.transitionIn ??
+      choose(transPool, n - 1, n, transitions[n - 1] ?? undefined, settings, 'transition');
+  }
+  return { motions, transitions, wrap };
 }
 
 function choose<T extends string>(

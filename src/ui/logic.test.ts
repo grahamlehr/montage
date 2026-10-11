@@ -177,10 +177,19 @@ describe('overrides', () => {
 
 describe('estimates', () => {
   it('timing', () => {
-    const t = estimateTiming({ ...DEFAULT_SETTINGS, totalDuration: 30, transitionSpeed: 0 }, 10);
+    const t = estimateTiming({ ...DEFAULT_SETTINGS, loop: false, totalDuration: 30, transitionSpeed: 0 }, 10);
     expect(t.transition).toBeCloseTo(1.6);
     expect(t.avgPhoto).toBeCloseTo((30 + 9 * 1.6) / 10);
+    // seamless loop adds the wrap transition: N transitions instead of N-1
+    const l = estimateTiming({ ...DEFAULT_SETTINGS, loop: true, totalDuration: 30, transitionSpeed: 0 }, 10);
+    expect(l.avgPhoto).toBeCloseTo((30 + 10 * 1.6) / 10);
     expect(estimateTiming(DEFAULT_SETTINGS, 1000).ok).toBe(false);
+  });
+  it('applySettingsPatch keeps loop boolean', () => {
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { loop: false }, false).loop).toBe(false);
+    expect(applySettingsPatch({ ...DEFAULT_SETTINGS, loop: false }, { loop: true }, false).loop).toBe(true);
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { loop: 'no' as unknown as boolean }, false).loop).toBe(true);
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { width: 540 }, false).loop).toBe(true);
   });
   it('bytes', () => {
     expect(formatBytes(2048)).toBe('2 KB');
