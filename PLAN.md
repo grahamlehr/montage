@@ -104,7 +104,7 @@ export interface PhotoSource {
 
 export interface PhotoOverrides {
   motion?: MotionStyle;
-  transitionIn?: TransitionStyle;   // transition INTO this photo (ignored for photo 0)
+  transitionIn?: TransitionStyle;   // transition INTO this photo (for photo 0: the wrap transition when looping, else ignored)
   fit?: FitMode;
   focus?: { x: number; y: number }; // 0..1 focal point for cover crop / motion target
 }
