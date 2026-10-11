@@ -36,8 +36,8 @@ export function App() {
   const timeline = build.ok ? build.timeline : null;
   const validationError = !build.ok && sources.length > 0 ? build.error : null;
   const timing = useMemo(
-    () => (sources.length > 0 ? timingSummary(sources.length, settings) : null),
-    [sources.length, settings],
+    () => (sources.length > 0 ? timingSummary(sources, settings, overrides) : null),
+    [sources, settings, overrides],
   );
 
   const timelineRef = useRef<Timeline | null>(null);

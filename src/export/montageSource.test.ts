@@ -18,7 +18,8 @@ const decodeSizes = new Map<number, { maxW: number; maxH: number }>();
 /** photos per shot for the next buildTimeline() call; default = one photo per shot (v1) */
 let shotSizes: number[] | null = null;
 
-vi.mock('../engine', () => ({
+vi.mock('../engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../engine')>()),
   buildTimeline: (photos: PhotoSource[], _o: unknown, settings: { totalDuration: number; fps: number }) => ({
     ok: true,
     timeline: shotTimeline(shotSizes ?? photos.map(() => 1), settings.totalDuration, 0.5, settings.fps),

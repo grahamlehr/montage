@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, GUTTER_MAX } from '../lib/constants';
 import type { MontageSettings, PhotoOverrides } from '../types';
-import { groupPhotos, timingSummary } from './engineShim';
+import { groupPhotos, timingSummary } from '../engine';
 import { applySettingsPatch, shotMembership, shotSummaryText, togglePool } from './logic';
 
 const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, width: 1920, height: 1080, ...o });

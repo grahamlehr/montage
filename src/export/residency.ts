@@ -1,6 +1,6 @@
 import { decodeSizeFor } from '../ingest';
 import type { Timeline } from '../types';
-import { cellPixelSize, photosOf } from './engineShim'; // TODO(T12-merge): import from '../engine'
+import { cellPixelSize, photosOf } from '../engine';
 
 /**
  * Photo residency by shot (PLAN.md §4.7.6), shared by the export source and the preview engine.

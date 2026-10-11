@@ -249,7 +249,7 @@ async function main() {
     r.setPhoto(0, await dotImage(540, 960));
     for (const m of MOTIONS) {
       const res = buildTimeline(
-        [{ id: 'a' }],
+        [{ id: 'a', naturalWidth: 540, naturalHeight: 960 }],
         {},
         {
           ...DEFAULT_SETTINGS,

@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DURATION_MAX, DURATION_MIN, GUTTER_MAX, estimateFileBytes } from '../lib/constants';
-import { timingSummary } from './engineShim';
+import { timingSummary } from '../engine';
 import {
   DIMENSION_PRESETS, FIT_MODES, FPS_OPTIONS, GROUPINGS, GROUPING_HINTS, GROUPING_LABELS, LAYOUT_LABELS, MOTION_STYLES,
   MULTI_LAYOUTS, QUALITIES, STYLE_LABELS, TRANSITION_STYLES, estimateTiming, formatBytes, formatRatio, formatSeconds,
@@ -93,6 +93,7 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
   const aspectLocked = useMontageStore((st) => st.aspectLocked);
   const areaNote = useMontageStore((st) => st.areaNote);
   const photos = useMontageStore((st) => st.photos);
+  const overrides = useMontageStore((st) => st.overrides);
   const setSettings = useMontageStore((st) => st.setSettings);
   const setAspectLocked = useMontageStore((st) => st.setAspectLocked);
   const applyPreset = useMontageStore((st) => st.applyPreset);
@@ -101,7 +102,7 @@ export function SettingsPanel({ timing, validationError }: SettingsPanelProps = 
   const toggleLayout = useMontageStore((st) => st.toggleLayout);
   const randomiseSeed = useMontageStore((st) => st.randomiseSeed);
 
-  const t = timing ?? (photos.length ? timingSummary(photos.map((p) => p.source), s) : estimateTiming(s, 0));
+  const t = timing ?? (photos.length ? timingSummary(photos.map((p) => p.source), s, overrides) : estimateTiming(s, 0));
   const transitionText = formatSeconds(t.transition);
   const pacingText = shotSummaryText(t);
   const groupingOff = s.grouping === 'off';

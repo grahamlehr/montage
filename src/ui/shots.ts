@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { groupPhotos } from './engineShim';
+import { groupPhotos } from '../engine';
 import { shotMembership } from './logic';
 import type { ShotMembership } from './logic';
 import { useMontageStore } from './store';
