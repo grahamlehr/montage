@@ -1,90 +1,167 @@
-import { MIN_PHOTO_DURATION } from '../lib/constants';
+import { CELL_MOTION_SCALE, MIN_PHOTO_DURATION } from '../lib/constants';
 import { deriveSeed, mulberry32 } from '../lib/rng';
-import type {
-  BuildResult,
-  MontageSettings,
-  PhotoOverrides,
-  PhotoSource,
-  Segment,
-} from '../types';
+import type { BuildResult, Cell, MontageSettings, PhotoOverrides, Segment } from '../types';
 import { clamp } from './easing';
+import { groupPhotos, type GroupablePhoto, type ShotGroup } from './grouping';
+import { layoutCells } from './layouts';
 import { motionTransforms } from './motion';
 import { minPossibleDuration, pacingWeights, solveTiming, transitionDuration } from './pacing';
 import { resolveStyles } from './styles';
+
+/** Stagger limits (§4.7.3). */
+const STAGGER_STEP_MAX = 0.3;
+const STAGGER_STEP_FRACTION = 0.12;
+const STAGGER_DURATION_MAX = 0.35;
+const STAGGER_DURATION_FACTOR = 1.2;
+const STAGGER_HOLD_FRACTION = 0.5;
 
 function tooMany(count: number, minWeight: number): string {
   const needed = Math.ceil((MIN_PHOTO_DURATION * count) / minWeight);
   return `Too many photos for this length — each photo would be shorter than ${MIN_PHOTO_DURATION} s. Use a longer video (at least ${needed} s), lower the pacing, or remove photos.`;
 }
 
+/** Extra screen time for a shot of k photos (§4.7.3). */
+export function shotWeight(k: number): number {
+  return 1 + 0.5 * (k - 1);
+}
+
+/** Pacing weights per shot × shotWeight, renormalised to sum to the shot count. Untouched when all shots are single. */
+export function shotWeights(groups: readonly ShotGroup[], pacing: number, seed: number): number[] {
+  const S = groups.length;
+  const base = pacingWeights(S, pacing, seed);
+  if (groups.every((g) => g.photoIndices.length === 1)) return base;
+  const raw = base.map((w, s) => w * shotWeight(groups[s]?.photoIndices.length ?? 1));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  return raw.map((w) => (w * S) / sum);
+}
+
+/** Nominal transition into each shot (index 0 = null): first photo's override, else the pool at shot index. */
+function shotTransitions(
+  photos: readonly GroupablePhoto[],
+  groups: readonly ShotGroup[],
+  overrides: Record<string, PhotoOverrides>,
+  settings: MontageSettings,
+): ReturnType<typeof resolveStyles>['transitions'] {
+  const firsts = groups.map((g) => photos[g.photoIndices[0] as number] as GroupablePhoto);
+  return resolveStyles(firsts, overrides, settings).transitions;
+}
+
 export function buildTimeline(
-  photos: ReadonlyArray<Pick<PhotoSource, 'id'>>,
+  photos: readonly GroupablePhoto[],
   overrides: Record<string, PhotoOverrides>,
   settings: MontageSettings,
 ): BuildResult {
   const n = photos.length;
   if (n === 0) return { ok: false, error: 'Add at least one photo to build a montage.' };
   const L = settings.totalDuration;
-  if (!Number.isFinite(L) || L <= 0) return { ok: false, error: 'Total duration must be greater than 0 seconds.' };
+  if (!Number.isFinite(L) || L <= 0)
+    return { ok: false, error: 'Total duration must be greater than 0 seconds.' };
   const fps = settings.fps;
 
-  const weights = pacingWeights(n, settings.pacing, settings.seed);
+  const groups = groupPhotos(photos, overrides, settings);
+  const S = groups.length;
+  const weights = shotWeights(groups, settings.pacing, settings.seed);
   if (minPossibleDuration(weights, L) < MIN_PHOTO_DURATION - 1e-9) {
-    return { ok: false, error: tooMany(n, Math.min(...weights)) };
+    return { ok: false, error: tooMany(S, Math.min(...weights)) };
   }
 
-  const styles = resolveStyles(photos, overrides, settings);
+  const motions = resolveStyles(photos, overrides, settings).motions;
+  const shotTrans = shotTransitions(photos, groups, overrides, settings);
   const nominalT = transitionDuration(settings.transitionSpeed);
   const nominal: number[] = [];
-  for (let j = 0; j < n - 1; j++) nominal.push(styles.transitions[j + 1] === 'cut' ? 0 : nominalT);
+  for (let j = 0; j < S - 1; j++) nominal.push(shotTrans[j + 1] === 'cut' ? 0 : nominalT);
   const { durations, transitions } = solveTiming(weights, L, nominal);
 
   const segments: Segment[] = [];
   let start = 0;
-  for (let i = 0; i < n; i++) {
-    const photo = photos[i] as Pick<PhotoSource, 'id'>;
-    const ov = overrides[photo.id];
-    const end = i === n - 1 ? L : start + (durations[i] as number);
-    const focus = {
-      x: clamp(ov?.focus?.x ?? 0.5, 0, 1),
-      y: clamp(ov?.focus?.y ?? 0.5, 0, 1),
-    };
-    const motion = styles.motions[i]!;
-    const { from, to } = motionTransforms(
-      motion,
-      settings.motionIntensity,
-      focus,
-      mulberry32(deriveSeed(settings.seed, 'kenBurns', i)),
+  for (let s = 0; s < S; s++) {
+    const group = groups[s] as ShotGroup;
+    const end = s === S - 1 ? L : start + (durations[s] as number);
+    const tStyle = shotTrans[s];
+    const transitionIn =
+      s === 0 || !tStyle ? null : { style: tStyle, start, duration: transitions[s - 1] as number };
+    const multi = group.photoIndices.length > 1;
+    const intensity = multi ? settings.motionIntensity * CELL_MOTION_SCALE : settings.motionIntensity;
+    const plan = layoutCells(
+      group.layout,
+      group.photoIndices.length,
+      settings.width,
+      settings.height,
+      settings.gutter,
+      settings.seed,
+      group.photoIndices[0] as number,
     );
-    const tStyle = styles.transitions[i];
+
+    // Stagger (§4.7.3): cell 0 present from start; the rest pop in after the transition-in.
+    const tInEnd = start + (transitionIn?.duration ?? 0);
+    const outgoing = s < S - 1 ? (transitions[s] as number) : 0;
+    const hold = end - outgoing - tInEnd;
+    const step = Math.min(STAGGER_STEP_MAX, STAGGER_STEP_FRACTION * hold);
+    const revealDur = Math.min(STAGGER_DURATION_MAX, STAGGER_DURATION_FACTOR * step);
+    const k = group.photoIndices.length;
+    const stagger =
+      settings.reveal === 'stagger' &&
+      multi &&
+      hold > 0 &&
+      step > 0 &&
+      tInEnd + (k - 2) * step + revealDur <= tInEnd + STAGGER_HOLD_FRACTION * hold + 1e-9;
+
+    const cells: Cell[] = group.photoIndices.map((i, c) => {
+      const ov = overrides[(photos[i] as GroupablePhoto).id];
+      const focus = {
+        x: clamp(ov?.focus?.x ?? 0.5, 0, 1),
+        y: clamp(ov?.focus?.y ?? 0.5, 0, 1),
+      };
+      const motion = motions[i]!;
+      const { from, to } = motionTransforms(
+        motion,
+        intensity,
+        focus,
+        mulberry32(deriveSeed(settings.seed, 'kenBurns', i)),
+      );
+      const place = plan.cells[c] ?? plan.cells[0]!;
+      return {
+        photoIndex: i,
+        rect: place.rect,
+        rotation: place.rotation,
+        border: place.border,
+        motion,
+        motionFrom: from,
+        motionTo: to,
+        fit: ov?.fit ?? (multi ? 'cover' : settings.fit),
+        focus,
+        revealStart: stagger && c > 0 ? tInEnd + (c - 1) * step : start,
+        revealDuration: stagger && c > 0 ? revealDur : 0,
+      };
+    });
+
     segments.push({
-      photoIndex: i,
+      layout: group.layout,
+      cells,
+      backdrop: plan.backdropCell === null ? null : (group.photoIndices[plan.backdropCell] ?? null),
       start,
       end,
-      motion,
-      motionFrom: from,
-      motionTo: to,
-      fit: ov?.fit ?? settings.fit,
-      focus,
-      transitionIn: i === 0 || !tStyle ? null : { style: tStyle, start, duration: transitions[i - 1] as number },
+      transitionIn,
     });
-    if (i < n - 1) start = end - (transitions[i] as number);
+    if (s < S - 1) start = end - (transitions[s] as number);
   }
   return { ok: true, timeline: { duration: L, fps, frameCount: Math.round(L * fps), segments } };
 }
 
-/** Cheap summary for UI labels. `transition` is the nominal (unclamped) duration. */
+/** Cheap summary for UI labels. `transition` is the nominal (unclamped) duration; durations are per shot. */
 export function timingSummary(
-  photoCount: number,
+  photos: readonly GroupablePhoto[],
   settings: MontageSettings,
-): { transition: number; avgPhoto: number; minPhoto: number; ok: boolean } {
+  overrides: Record<string, PhotoOverrides> = {},
+): { transition: number; avgShot: number; minShot: number; shots: number; ok: boolean } {
   const transition = transitionDuration(settings.transitionSpeed);
-  if (photoCount <= 0) return { transition, avgPhoto: 0, minPhoto: 0, ok: false };
-  const w = pacingWeights(photoCount, settings.pacing, settings.seed);
-  const { durations } = solveTiming(w, settings.totalDuration, new Array<number>(photoCount - 1).fill(transition));
-  const avgPhoto = durations.reduce((a, b) => a + b, 0) / photoCount;
-  const minPhoto = Math.min(...durations);
+  if (photos.length === 0) return { transition, avgShot: 0, minShot: 0, shots: 0, ok: false };
+  const groups = groupPhotos(photos, overrides, settings);
+  const shots = groups.length;
+  const w = shotWeights(groups, settings.pacing, settings.seed);
+  const { durations } = solveTiming(w, settings.totalDuration, new Array<number>(shots - 1).fill(transition));
+  const avgShot = durations.reduce((a, b) => a + b, 0) / shots;
+  const minShot = Math.min(...durations);
   const ok = minPossibleDuration(w, settings.totalDuration) >= MIN_PHOTO_DURATION - 1e-9;
-  return { transition, avgPhoto, minPhoto, ok };
+  return { transition, avgShot, minShot, shots, ok };
 }
-
