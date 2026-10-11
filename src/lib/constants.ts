@@ -1,4 +1,4 @@
-import type { MontageSettings } from '../types';
+import type { MontageSettings, MultiLayout } from '../types';
 
 /** Shared limits and defaults (PLAN.md §1, §3, §4). Orchestrator-owned. */
 export const DIM_MIN = 128;
@@ -38,7 +38,20 @@ export const DEFAULT_SETTINGS: MontageSettings = {
   fit: 'blur',
   background: '#000000',
   quality: 'high',
+  grouping: 'off',
+  layoutPool: ['duo', 'trio', 'quad'],
+  gutter: 0.012,
+  reveal: 'together',
 };
+
+/** Multi-photo shots (§4.9). Photos per layout; polaroid may fall back to 2 when only 2 are available. */
+export const LAYOUT_CAPACITY: Record<MultiLayout, number> = { duo: 2, pip: 2, trio: 3, polaroid: 3, quad: 4 };
+export const MAX_CELLS = 4;
+export const GUTTER_MAX = 0.04;
+/** Chance per eligible position that `grouping: 'mixed'` starts a multi-photo shot. */
+export const MIXED_GROUP_PROBABILITY = 0.35;
+/** motionIntensity multiplier for cells of multi-photo shots. */
+export const CELL_MOTION_SCALE = 0.6;
 
 /** Round to the nearest even integer within [DIM_MIN, DIM_MAX]. */
 export function clampEvenDim(n: number): number {
