@@ -20,10 +20,14 @@ export const TRIO_HERO = 0.58;
 /** pip inset: short side as a fraction of the frame's short side, and corner margin. */
 export const PIP_SIZE = 0.34;
 export const PIP_MARGIN = 0.04;
-/** polaroid card side as a fraction of the frame's short side, fan spacing, and max tilt. */
+/** polaroid card side as a fraction of the frame's short side (an upper bound), and max tilt. */
 export const POLAROID_SIZE = 0.58;
-export const POLAROID_SPREAD = 0.22;
 export const POLAROID_MAX_TILT = (8 * Math.PI) / 180;
+/** Fan step between consecutive cards as a fraction of the card side: along the long axis, or per axis on a diagonal. */
+export const POLAROID_SPREAD = 0.7;
+export const POLAROID_DIAGONAL_SPREAD = 0.47;
+/** Max random offset across the fan, as a fraction of the frame's short side (straight fan only). */
+export const POLAROID_JITTER = 0.03;
 
 const FULL: Rect = { x: 0, y: 0, w: 1, h: 1 };
 const flat = (rect: Rect, border: CellBorder = 'none'): CellPlacement => ({ rect, rotation: 0, border });
@@ -131,16 +135,28 @@ export function layoutCells(
     case 'polaroid': {
       const k = Math.max(1, Math.min(3, count));
       const rng = mulberry32(deriveSeed(seed, 'polaroid', key));
-      const side = POLAROID_SIZE * m;
       const long = landscape ? W : H;
       const shortPx = landscape ? H : W;
-      const spread = k > 1 ? Math.min(POLAROID_SPREAD * m, (long - side) / (k - 1)) : 0;
+      // A card tilted by up to ±POLAROID_MAX_TILT needs e·side of room per axis to stay inside the frame.
+      const e = Math.cos(POLAROID_MAX_TILT) + Math.sin(POLAROID_MAX_TILT);
+      const steps = k - 1;
+      const jit = POLAROID_JITTER * m;
+      // Straight fan along the long axis vs a diagonal fan; take whichever allows the bigger card. Wide frames
+      // fan straight at ≈58%; near-square frames have no room for a straight fan and go diagonal instead.
+      const straight = Math.min(long / (steps * POLAROID_SPREAD + e), (shortPx - 2 * jit) / e);
+      const diagonal = Math.min(long, shortPx) / (steps * POLAROID_DIAGONAL_SPREAD + e);
+      const diag = steps > 0 && diagonal > straight;
+      const side = Math.min(POLAROID_SIZE * m, diag ? diagonal : straight);
+      const stepAlong = side * (diag ? POLAROID_DIAGONAL_SPREAD : POLAROID_SPREAD);
+      const stepAcross = diag ? side * POLAROID_DIAGONAL_SPREAD * (rng() < 0.5 ? -1 : 1) : 0;
+      const slack = ((e - 1) / 2) * side;
       const cells: CellPlacement[] = [];
       for (let j = 0; j < k; j++) {
         const rotation = (rng() * 2 - 1) * POLAROID_MAX_TILT;
-        const jitter = (rng() * 2 - 1) * 0.03 * m;
-        const along = clamp(long / 2 + (j - (k - 1) / 2) * spread - side / 2, 0, long - side);
-        const across = clamp(shortPx / 2 + jitter - side / 2, 0, shortPx - side);
+        const jitter = diag ? 0 : (rng() * 2 - 1) * jit;
+        const off = j - steps / 2;
+        const along = clamp(long / 2 + off * stepAlong - side / 2, slack, long - side - slack);
+        const across = clamp(shortPx / 2 + off * stepAcross + jitter - side / 2, slack, shortPx - side - slack);
         const px = landscape ? along : across;
         const py = landscape ? across : along;
         cells.push({

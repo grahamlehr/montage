@@ -17,7 +17,7 @@ const input = document.getElementById('files') as HTMLInputElement;
 window.runMontage = async (width, height, fps, seconds, failEncoders, failAfter) => {
   const files = Array.from(input.files ?? []);
   const photos = await Promise.all(files.map((f, i) => readPhotoSource(f, `p${i}`)));
-  const settings: MontageSettings = { ...DEFAULT_SETTINGS, width, height, fps, totalDuration: seconds };
+  const settings: MontageSettings = { ...DEFAULT_SETTINGS, grouping: 'off', width, height, fps, totalDuration: seconds };
   const built = buildTimeline(photos, {}, settings);
   if (!built.ok) throw new Error(built.error);
   const segs = built.timeline.segments;

@@ -4,8 +4,8 @@ import { exportAndDownload, fixture, set50, setSettings, upload } from './helper
 import { frameMd5s, psnrAvg, seekPreview } from './helpers/frames.js';
 
 /**
- * Invariant 1 (docs/proposals/multi-photo-shots.md §3): with `grouping: 'off'` (the default) the branch must
- * produce exactly main's output. Needs a dev server of `main` (e.g. a detached worktree of main running
+ * Invariant 1 (docs/proposals/multi-photo-shots.md §3): with `grouping: 'off'` the branch must produce
+ * exactly v1 main's output (the default is `'auto'`, so both sides pin `'off'`). Needs a dev server of `main` (e.g. a detached worktree of main running
  * `npx vite --port 5174` in a checkout of main); point MONTAGE_MAIN_URL at it. CI skips it.
  */
 const MAIN = process.env.MONTAGE_MAIN_URL;
@@ -41,7 +41,7 @@ async function run(browser: Browser, base: string, patch: Record<string, unknown
 for (const fit of ['cover', 'contain', 'blur'] as const) {
   test(`grouping off: ${fit} export + preview identical to main`, async ({ browser, baseURL }) => {
     test.setTimeout(8 * 60_000);
-    const ref = await run(browser, MAIN!, { fit });
+    const ref = await run(browser, MAIN!, { fit, grouping: 'off' });
     const cur = await run(browser, baseURL!, { fit, grouping: 'off' });
     assertMontage(cur.file, { width: 1280, height: 720, fps: 30, seconds: 10 });
 

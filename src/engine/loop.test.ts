@@ -23,7 +23,7 @@ function v1Timeline(tl: Timeline): unknown {
   };
   return { duration: tl.duration, fps: tl.fps, frameCount: tl.frameCount, segments: tl.segments.map(seg) };
 }
-const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, loop: true, ...o });
+const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, grouping: 'off', loop: true, ...o });
 function build(n: number, o: Partial<MontageSettings> = {}, ov: Record<string, PhotoOverrides> = {}): Timeline {
   const r = buildTimeline(photos(n), ov, S(o));
   if (!r.ok) throw new Error(r.error);
@@ -35,7 +35,7 @@ const ALL: TransitionStyle[] = ['cut', 'crossfade', 'dipToBlack', 'slideLeft', '
 describe('loop=false is unchanged (golden captured before #25)', () => {
   GOLDEN_CONFIGS.forEach((c, k) => {
     it(`config ${k}`, () => {
-      const r = buildTimeline(photos(c.n), c.ov ?? {}, { ...DEFAULT_SETTINGS, loop: false, ...c.s });
+      const r = buildTimeline(photos(c.n), c.ov ?? {}, { ...DEFAULT_SETTINGS, grouping: 'off', loop: false, ...c.s });
       const g = golden[k] as unknown as { timeline: Record<string, unknown>; frames: unknown[] };
       expect(r.ok).toBe(true);
       if (!r.ok) return;

@@ -9,7 +9,7 @@ polaroid stack), with optional staggered "photo-dump" reveals, while:
 
 - **every existing transition works unchanged.** A transition still blends two full-frame textures; each
   texture now holds a whole *shot* instead of one photo;
-- **`grouping: 'off'` (the default) yields output identical to today**, byte-for-byte per frame;
+- **`grouping: 'off'` yields output identical to today**, byte-for-byte per frame;
 - `buildTimeline()` / `frameAt()` stay pure and deterministic (seeded via `src/lib/rng.ts`).
 
 The main use case is `grouping: 'auto'`, which pairs consecutive portrait photos side by side in landscape
@@ -51,7 +51,7 @@ export interface PhotoOverrides {
 
 export interface MontageSettings {
   // ...all existing fields unchanged...
-  grouping: Grouping;             // NEW, default 'off'
+  grouping: Grouping;             // NEW, default 'auto' (shipped as 'off', flipped after T16)
   layoutPool: MultiLayout[];      // NEW, ≥1, used by 'mixed'; default ['duo', 'trio', 'quad']
   gutter: number;                 // NEW, 0..0.04 of the shorter output side, filled with `background`; default 0.012
   reveal: CellReveal;             // NEW, default 'together'
@@ -160,7 +160,7 @@ the compiler finds every consumer.
 | trio | hero (first photo) in the left 58%, two stacked on the right | hero in the top 58%, two side by side underneath |
 | quad | 2×2 | 2×2 |
 | pip | cell 0 full frame; cell 1 inset 34% of the short side in a seeded corner, 4% margin, `border 'polaroid'` | same |
-| polaroid | 2–3 cards about 58% of the short side, fanned around centre, rotation seeded in ±8°, `border 'polaroid'`, `backdrop` = first photo | same |
+| polaroid | 2–3 square cards up to 58% of the short side, fanned around centre along the long axis (step 0.7 card), or diagonally (step 0.47 card per axis, seeded direction) when that allows a bigger card (near-square frames); sized so every back card shows ≥ 60% and every card stays inside the frame at the ±8° seeded tilt, `border 'polaroid'`, `backdrop` = first photo | same |
 
 ### 4.7.3 Timing
 
@@ -259,7 +259,8 @@ stagger as a second pass inside the same wave or the next one.
 
 ## 7. Decisions (resolved)
 
-All four open questions below went with the recommendation: (1) default `'off'`, flip to `'auto'` after T16;
+All four open questions below went with the recommendation: (1) default `'off'`, flip to `'auto'` after T16 —
+**done:** T16 passed and the default is now `'auto'`;
 (2) multi-cell shots force `cover`, a per-photo `fit` override still wins; (3) `transitionIn` on a non-first
 photo is ignored; (4) fixed p = 0.35 (`MIXED_GROUP_PROBABILITY`), no slider.
 
