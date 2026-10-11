@@ -1,33 +1,34 @@
 import { buildTimeline, frameAt } from '../engine';
-import { decodePhoto, decodeSizeFor } from '../ingest';
+import { decodePhoto } from '../ingest';
 import { createRenderer } from '../render';
 import type { MontageRenderer } from '../render';
 import type { Timeline } from '../types';
 import type { FrameSource } from './frameSource';
+import { photosForSegments, segmentIndexAt } from './residency';
+import type { PhotoDecode, Size } from './residency';
 
 /**
- * Real export frame source: decodes each File at export size inside the worker, builds the same
- * timeline as the preview (same overrides + settings + seed), and draws frameAt(i / fps) with the
- * WebGL2 renderer on the OffscreenCanvas. Only the photos around the current segment stay resident
- * (previous, current, next); photos are decoded ahead of need and released once passed.
+ * Real export frame source: decodes each File inside the worker, builds the same timeline as the preview
+ * (same overrides + settings + seed), and draws frameAt(i / fps) with the WebGL2 renderer on the
+ * OffscreenCanvas. Residency is by shot (§4.7.6): only the photos of the previous, current and next
+ * segment stay resident, each decoded at its cell size; photos are decoded ahead of need and released
+ * once their shot has passed.
  */
 export function createMontageSource(): FrameSource {
   let renderer: MontageRenderer | null = null;
   let timeline: Timeline | null = null;
   let files: File[] = [];
-  let sizes: { width: number; height: number }[] = [];
-  let out = { width: 0, height: 0 };
+  let sizes: Size[] = [];
+  let out: Size = { width: 0, height: 0 };
   let disposed = false;
-  let cursor = 0; // current segment index (monotonic except when an encoder retry restarts at frame 0)
   const entries = new Map<number, Promise<ImageBitmap | null>>();
 
-  const load = (i: number): Promise<ImageBitmap | null> => {
+  const load = ({ photoIndex: i, maxW, maxH }: PhotoDecode): Promise<ImageBitmap | null> => {
     const existing = entries.get(i);
     if (existing) return existing;
     const file = files[i];
-    const size = sizes[i];
-    if (!file || !size) return Promise.resolve(null);
-    const p = decodePhoto(file, decodeSizeFor(out, size)).then((bmp) => {
+    if (!file) return Promise.resolve(null);
+    const p = decodePhoto(file, { maxW, maxH }).then((bmp) => {
       if (disposed || entries.get(i) !== p) {
         bmp.close(); // released while decoding
         return null;
@@ -47,6 +48,9 @@ export function createMontageSource(): FrameSource {
     void p.then((bmp) => bmp?.close()).catch(() => undefined);
   };
 
+  const photosOfSegments = (segs: number[]): PhotoDecode[] =>
+    timeline ? photosForSegments(timeline, segs, out, sizes) : [];
+
   return {
     async init(canvas, request, onDecodeProgress) {
       const { settings } = request;
@@ -60,32 +64,30 @@ export function createMontageSource(): FrameSource {
       renderer = createRenderer(canvas);
       renderer.setSize(settings.width, settings.height);
       renderer.setBackground(settings.background);
-      const first = Math.min(2, files.length);
+      const first = photosOfSegments([0, 1]);
       let done = 0;
-      onDecodeProgress(0, first);
-      await Promise.all(
-        Array.from({ length: first }, (_, i) => load(i).then(() => onDecodeProgress(++done, first))),
-      );
+      onDecodeProgress(0, first.length);
+      await Promise.all(first.map((d) => load(d).then(() => onDecodeProgress(++done, first.length))));
     },
     async draw(_frameIndex, t) {
       if (!renderer || !timeline) throw new Error('not initialised');
-      const segs = timeline.segments;
-      // Going backwards (export retry restarts at frame 0): rewind; the residency window re-decodes as needed.
-      while (cursor > 0 && (segs[cursor]?.start ?? 0) > t) cursor--;
-      while (cursor + 1 < segs.length && (segs[cursor + 1]?.start ?? Infinity) <= t) cursor++;
-      // Window: previous (still visible in a transition), current, next (decoded ahead).
-      // On a looping timeline the last segment's next is photo 0 (the wrap transition, §4.9); photo 0's
-      // own transition-in is that wrap, so it never needs a previous at the start of the video.
-      const n = segs.length;
-      const ahead = timeline.loop ? (cursor + 1) % n : cursor + 1;
-      const wanted = new Set([cursor - 1, cursor, ahead].filter((i) => i >= 0 && i < n));
+      // Derived from t alone, so going backwards (an encoder retry restarting at frame 0) rewinds the
+      // window and re-decodes whatever it needs.
+      const n = timeline.segments.length;
+      const cur = segmentIndexAt(timeline, t);
+      // Window: previous shot (still visible in a transition), current, next (decoded ahead). On a looping
+      // timeline the last shot's next is shot 0 (the wrap, §4.9); shot 0's own transition-in is that wrap,
+      // so it never needs a previous shot at the start of the video.
+      const next = timeline.loop ? (cur + 1) % n : cur + 1;
+      const wrap = timeline.loop ? timeline.segments[0]?.transitionIn : null;
+      const inWrap = cur === n - 1 && !!wrap && t >= wrap.start;
+      // The wrap needs shot 0 on screen as soon as it starts.
+      const needed = photosOfSegments(inWrap ? [cur - 1, cur, next] : [cur - 1, cur]);
+      const ahead = photosOfSegments([next]).filter((d) => !needed.some((x) => x.photoIndex === d.photoIndex));
+      const wanted = new Set([...needed, ...ahead].map((d) => d.photoIndex));
       for (const i of [...entries.keys()]) if (!wanted.has(i)) release(i);
-      const needed = [cursor - 1, cursor].filter((i) => wanted.has(i));
-      // The wrap needs photo 0 on screen as soon as it starts.
-      const wrap = timeline.loop ? segs[0]?.transitionIn : null;
-      if (cursor === n - 1 && wrap && t >= wrap.start && wanted.has(ahead)) needed.push(ahead);
-      else if (wanted.has(ahead)) void load(ahead).catch(() => undefined);
-      await Promise.all(needed.map((i) => load(i)));
+      for (const d of ahead) void load(d).catch(() => undefined);
+      await Promise.all(needed.map((d) => load(d)));
       renderer.draw(frameAt(timeline, t));
     },
     dispose() {

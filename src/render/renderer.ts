@@ -1,13 +1,23 @@
-import type { FitMode, FrameDescriptor, Layer, Renderer } from '../types';
-import { backdropPlacement, blurSize, parseHex, placePhoto } from './layout';
+import type { CellLayer, FitMode, FrameDescriptor, Layer, Renderer, Shot } from '../types';
+import {
+  backdropPlacement,
+  blurKey,
+  blurSize,
+  cellGeometry,
+  isFullFrameCell,
+  parseHex,
+  placePhoto,
+} from './layout';
 import type { TransitionProgramSpec } from './transitionSpec';
 import { transitionPrograms } from './transitions/index';
 
 export interface RendererStats {
   /** Resident photo textures. */
   photoTextures: number;
-  /** Cached blurred backgrounds. */
+  /** Cached blurred backgrounds (one per photo per frame/cell size). */
   blurCaches: number;
+  /** Whether the cell scratch target (multi-photo shots) is allocated. */
+  cellScratch: boolean;
   width: number;
   height: number;
   contextLost: boolean;
@@ -83,6 +93,64 @@ void main() {
   outColor = vec4(transition(uv, uProgress).rgb, 1.0);
 }`;
 
+/**
+ * Composites one rendered cell (sub-rect of the cell scratch texture) as a rotated, scaled card with a
+ * signed-distance edge (~1px anti-aliasing, no MSAA), optional white polaroid frame and analytic soft shadow.
+ * Positions are output pixels, top-left origin; local = card-centred, unrotated.
+ */
+const COMPOSITE_VERT = `#version 300 es
+uniform vec2 uRes;
+uniform vec2 uCenter;
+uniform vec2 uQuadHalf;
+uniform float uRot;
+out vec2 vLocal;
+void main() {
+  int i = gl_VertexID;
+  // two triangles: (0,1,2) (2,1,3) over corners (-1,-1) (1,-1) (-1,1) (1,1)
+  int k = i < 3 ? i : (i == 3 ? 2 : (i == 4 ? 1 : 3));
+  vec2 corner = vec2(float(k & 1) * 2.0 - 1.0, float((k >> 1) & 1) * 2.0 - 1.0);
+  vec2 local = corner * uQuadHalf;
+  float c = cos(uRot), s = sin(uRot);
+  vec2 p = uCenter + vec2(c * local.x - s * local.y, s * local.x + c * local.y);
+  vLocal = local;
+  gl_Position = vec4(p.x / uRes.x * 2.0 - 1.0, 1.0 - p.y / uRes.y * 2.0, 0.0, 1.0);
+}`;
+
+const COMPOSITE_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+uniform vec2 uTexScale;   // content size / scratch size
+uniform vec2 uTexMax;     // clamp (half a texel inside the content)
+uniform vec2 uCardHalf;
+uniform vec2 uPhotoOff;
+uniform vec2 uPhotoHalf;
+uniform float uAlpha;
+uniform float uShadowBlur;
+uniform float uShadowOffset;
+uniform float uShadowOpacity;
+in vec2 vLocal;
+out vec4 outColor;
+float sdBox(vec2 p, vec2 b) {
+  vec2 d = abs(p) - b;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+void main() {
+  float dCard = sdBox(vLocal, uCardHalf);
+  float card = clamp(0.5 - dCard, 0.0, 1.0);
+  vec2 q = vLocal - uPhotoOff;
+  float photo = clamp(0.5 - sdBox(q, uPhotoHalf), 0.0, 1.0);
+  vec2 uv = q / (2.0 * uPhotoHalf) + 0.5; // 0..1, top-left origin
+  vec2 st = clamp(vec2(uv.x, 1.0 - uv.y) * uTexScale, vec2(0.0), uTexMax);
+  vec3 rgb = mix(vec3(1.0), texture(uTex, st).rgb, photo);
+  float shadow = 0.0;
+  if (uShadowOpacity > 0.0) {
+    float dS = sdBox(vLocal - vec2(0.0, uShadowOffset), uCardHalf);
+    shadow = uShadowOpacity * (1.0 - smoothstep(-uShadowBlur, uShadowBlur, dS));
+  }
+  float a = card + shadow * (1.0 - card);
+  outColor = vec4(rgb * card, a) * uAlpha; // premultiplied
+}`;
+
 const BLUR_DARKEN = 0.55;
 const BLUR_STEP = 2; // texel spacing of taps
 
@@ -126,13 +194,16 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
   let listener: ((e: 'lost' | 'restored') => void) | null = null;
 
   let photos = new Map<number, PhotoTex>();
-  let blurCache = new Map<number, Target>();
+  /** photoIndex -> blurKey(frame or cell size) -> blurred cover. */
+  let blurCache = new Map<number, Map<string, Target>>();
   let scratch: Target | null = null; // blur ping-pong
+  let cellScratch: Target | null = null; // output-sized; a cell renders into its bottom-left sub-rect
   let layerA: Target | null = null;
   let layerB: Target | null = null;
   let vao: WebGLVertexArrayObject | null = null;
   let photoProg: Prog;
   let blurProg: Prog;
+  let compositeProg: Prog;
   let transProgs = new Map<string, Prog>();
 
   function compile(type: number, src: string): WebGLShader {
@@ -146,10 +217,10 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     }
     return s;
   }
-  function program(frag: string): Prog {
+  function program(frag: string, vert = VERT): Prog {
     const g = gl!;
     const p = g.createProgram()!;
-    const vs = compile(g.VERTEX_SHADER, VERT);
+    const vs = compile(g.VERTEX_SHADER, vert);
     const fs = compile(g.FRAGMENT_SHADER, frag);
     g.attachShader(p, vs);
     g.attachShader(p, fs);
@@ -172,6 +243,7 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     vao = gl!.createVertexArray();
     photoProg = program(PHOTO_FRAG);
     blurProg = program(BLUR_FRAG);
+    compositeProg = program(COMPOSITE_FRAG, COMPOSITE_VERT);
     transProgs = new Map();
   }
   initResources();
@@ -197,10 +269,14 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     gl!.deleteTexture(t.tex);
   }
   function freeBlurCache() {
-    for (const t of blurCache.values()) freeTarget(t);
+    for (const m of blurCache.values()) for (const t of m.values()) freeTarget(t);
     blurCache.clear();
     freeTarget(scratch);
     scratch = null;
+  }
+  function freeCellScratch() {
+    freeTarget(cellScratch);
+    cellScratch = null;
   }
   function freeLayerTargets() {
     freeTarget(layerA);
@@ -245,11 +321,19 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     fullscreen();
   }
 
-  function blurredBackground(index: number, ph: PhotoTex, focus: { x: number; y: number }): Target {
-    const cached = blurCache.get(index);
+  function blurredBackground(
+    index: number,
+    ph: PhotoTex,
+    focus: { x: number; y: number },
+    fw: number,
+    fh: number,
+  ): Target {
+    const key = blurKey(fw, fh);
+    let perPhoto = blurCache.get(index);
+    const cached = perPhoto?.get(key);
     if (cached) return cached;
     const g = gl!;
-    const { w, h } = blurSize(width, height);
+    const { w, h } = blurSize(fw, fh);
     const out = makeTarget(w, h);
     if (!scratch || scratch.w !== w || scratch.h !== h) {
       freeTarget(scratch);
@@ -272,45 +356,106 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     bindTex(0, scratch.tex);
     g.uniform2f(loc(blurProg, 'uDir'), 0, BLUR_STEP / h);
     fullscreen();
-    blurCache.set(index, out);
+    if (!perPhoto) {
+      perPhoto = new Map();
+      blurCache.set(index, perPhoto);
+    }
+    perPhoto.set(key, out);
     return out;
   }
 
-  /** Render one layer into `target` (null = canvas). */
-  function renderLayer(layer: Layer, target: Target | null) {
-    bindTarget(target, width, height);
-    clear(bg);
+  /**
+   * Draw one layer into `target` (null = canvas) whose frame is fw x fh pixels, without clearing. With
+   * fw x fh = output size this is exactly v1's single-layer drawing (the invariant-1 fast path).
+   */
+  function drawLayer(layer: Layer, target: Target | null, fw: number, fh: number) {
+    bindTarget(target, fw, fh);
     const ph = photos.get(layer.photoIndex);
     if (!ph) return;
     const fit: FitMode = layer.fit;
     if (fit === 'blur') {
-      const b = blurredBackground(layer.photoIndex, ph, layer.focus);
-      bindTarget(target, width, height); // blurredBackground rebinds
-      drawRect(
-        b.tex,
-        width,
-        height,
-        backdropPlacement(width, height, layer.focus, layer.transform),
-        BLUR_DARKEN,
-        true,
-      );
+      const b = blurredBackground(layer.photoIndex, ph, layer.focus, fw, fh);
+      bindTarget(target, fw, fh); // blurredBackground rebinds
+      drawRect(b.tex, fw, fh, backdropPlacement(fw, fh, layer.focus, layer.transform), BLUR_DARKEN, true);
       drawRect(
         ph.tex,
-        width,
-        height,
-        placePhoto(ph.w, ph.h, width, height, 'contain', layer.focus, layer.transform),
+        fw,
+        fh,
+        placePhoto(ph.w, ph.h, fw, fh, 'contain', layer.focus, layer.transform),
         1,
         false,
       );
     } else {
-      drawRect(
-        ph.tex,
-        width,
-        height,
-        placePhoto(ph.w, ph.h, width, height, fit, layer.focus, layer.transform),
-        1,
-        false,
-      );
+      drawRect(ph.tex, fw, fh, placePhoto(ph.w, ph.h, fw, fh, fit, layer.focus, layer.transform), 1, false);
+    }
+  }
+
+  /** Full-frame blurred, darkened cover of the shot's backdrop photo, following its transform. */
+  function drawBackdrop(layer: Layer, target: Target | null) {
+    const ph = photos.get(layer.photoIndex);
+    if (!ph) return;
+    const b = blurredBackground(layer.photoIndex, ph, layer.focus, width, height);
+    bindTarget(target, width, height);
+    drawRect(
+      b.tex,
+      width,
+      height,
+      backdropPlacement(width, height, layer.focus, layer.transform),
+      BLUR_DARKEN,
+      true,
+    );
+  }
+
+  /** General path: render the cell's content at its own pixel size, then composite it as one card. */
+  function drawCell(cell: CellLayer, target: Target | null) {
+    if (!photos.has(cell.photoIndex)) return;
+    const g = gl!;
+    const geo = cellGeometry(cell, width, height);
+    if (!cellScratch || cellScratch.w !== width || cellScratch.h !== height) {
+      freeCellScratch();
+      cellScratch = makeTarget(width, height);
+    }
+    const cw = Math.min(geo.contentW, width);
+    const ch = Math.min(geo.contentH, height);
+    bindTarget(cellScratch, cw, ch);
+    clear(bg);
+    drawLayer(cell, cellScratch, cw, ch);
+
+    bindTarget(target, width, height);
+    const pr = compositeProg;
+    g.useProgram(pr.p);
+    bindTex(0, cellScratch.tex);
+    g.uniform1i(loc(pr, 'uTex'), 0);
+    g.uniform2f(loc(pr, 'uRes'), width, height);
+    g.uniform2f(loc(pr, 'uCenter'), geo.cx, geo.cy);
+    g.uniform2f(loc(pr, 'uQuadHalf'), geo.quadHalfW, geo.quadHalfH);
+    g.uniform1f(loc(pr, 'uRot'), geo.rotation);
+    g.uniform2f(loc(pr, 'uTexScale'), cw / width, ch / height);
+    g.uniform2f(loc(pr, 'uTexMax'), (cw - 0.5) / width, (ch - 0.5) / height);
+    g.uniform2f(loc(pr, 'uCardHalf'), geo.cardHalfW, geo.cardHalfH);
+    g.uniform2f(loc(pr, 'uPhotoOff'), geo.photoOffX, geo.photoOffY);
+    g.uniform2f(loc(pr, 'uPhotoHalf'), geo.photoHalfW, geo.photoHalfH);
+    g.uniform1f(loc(pr, 'uAlpha'), geo.alpha);
+    g.uniform1f(loc(pr, 'uShadowBlur'), Math.max(geo.shadowBlur, 1e-3));
+    g.uniform1f(loc(pr, 'uShadowOffset'), geo.shadowOffset);
+    g.uniform1f(loc(pr, 'uShadowOpacity'), geo.shadowOpacity);
+    g.enable(g.BLEND);
+    // premultiplied over; keep destination alpha (targets are opaque)
+    g.blendFuncSeparate(g.ONE, g.ONE_MINUS_SRC_ALPHA, g.ZERO, g.ONE);
+    g.bindVertexArray(vao);
+    g.drawArrays(g.TRIANGLES, 0, 6);
+    g.disable(g.BLEND);
+  }
+
+  /** Composite a whole shot into `target` (null = canvas): background, backdrop, then cells back to front. */
+  function renderShot(shot: Shot, target: Target | null) {
+    bindTarget(target, width, height);
+    clear(bg);
+    if (shot.backdrop) drawBackdrop(shot.backdrop, target);
+    for (const cell of shot.cells) {
+      if (!(cell.reveal > 0)) continue;
+      if (isFullFrameCell(cell)) drawLayer(cell, target, width, height);
+      else drawCell(cell, target);
     }
   }
 
@@ -329,7 +474,7 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     g.disable(g.BLEND);
     g.disable(g.DEPTH_TEST);
     if (frame.kind === 'single') {
-      renderLayer(frame.layer, null);
+      renderShot(frame.shot, null);
       return;
     }
     let spec = transitionPrograms[frame.style];
@@ -343,8 +488,8 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
       layerA = makeTarget(width, height);
       layerB = makeTarget(width, height);
     }
-    renderLayer(frame.from, layerA);
-    renderLayer(frame.to, layerB!);
+    renderShot(frame.from, layerA);
+    renderShot(frame.to, layerB!);
     const pr = transitionProgram(key, spec);
     bindTarget(null, width, height);
     g.useProgram(pr.p);
@@ -379,7 +524,7 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     }
     const b = blurCache.get(index);
     if (b) {
-      freeTarget(b);
+      for (const t of b.values()) freeTarget(t);
       blurCache.delete(index);
     }
   }
@@ -393,7 +538,7 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     // All GL objects were invalidated; rebuild shared resources. Photos must be re-supplied by the caller.
     photos = new Map();
     blurCache = new Map();
-    scratch = layerA = layerB = null;
+    scratch = cellScratch = layerA = layerB = null;
     initResources();
     lost = false;
     listener?.('restored');
@@ -410,6 +555,7 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
       if (lost || disposed) return;
       freeBlurCache();
       freeLayerTargets();
+      freeCellScratch();
     },
     setPhoto(index, bitmap) {
       if (lost || disposed) return;
@@ -440,8 +586,10 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
         for (const i of [...photos.keys()]) deletePhoto(i);
         freeBlurCache();
         freeLayerTargets();
+        freeCellScratch();
         gl.deleteProgram(photoProg.p);
         gl.deleteProgram(blurProg.p);
+        gl.deleteProgram(compositeProg.p);
         for (const p of transProgs.values()) gl.deleteProgram(p.p);
         gl.deleteVertexArray(vao);
       }
@@ -450,7 +598,8 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     },
     stats: () => ({
       photoTextures: photos.size,
-      blurCaches: blurCache.size,
+      blurCaches: [...blurCache.values()].reduce((n, m) => n + m.size, 0),
+      cellScratch: cellScratch !== null,
       width,
       height,
       contextLost: lost,

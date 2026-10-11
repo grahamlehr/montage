@@ -182,6 +182,10 @@ export type ExportMessage =
 
 ---
 
+> **Contract v2 (multi-photo shots).** `Segment` is now a shot of 1–4 `Cell`s and `FrameDescriptor` carries
+> `Shot`s; settings gained `grouping`, `layoutPool`, `gutter`, `reveal`. The type listing above is v1;
+> `src/types.ts` is the source of truth. Spec: `docs/proposals/multi-photo-shots.md`.
+
 ## 4. Behaviour spec
 
 ### 4.1 Timing model (total duration fixed)
@@ -257,6 +261,14 @@ Given N photos, total `L`:
 
 ---
 
+### 4.10 Multi-photo shots (contract v2)
+Full spec: `docs/proposals/multi-photo-shots.md` §3–§4 (grouping, layout rects, timing, stagger, cell
+motion/fit, rendering, residency, UI). Decisions: default `grouping: 'off'` (output identical to v1; flip to
+`'auto'` after T16 passes); multi-cell shots force `cover` unless a per-photo `fit` override exists;
+looping (§4.9) works per shot: the wrap runs from the last shot into shot 0, shot 0 starts at −wrap, and a
+staggered shot 0 reveals its later cells only after the seam;
+`transitionIn` on a non-first photo of a shot is ignored; `mixed` uses a fixed p = 0.35.
+
 ## 5. Work breakdown
 
 | ID | Task | Owner paths | Depends on | Wave |
@@ -272,6 +284,12 @@ Given N photos, total `L`:
 | T8 | Playwright e2e + ffprobe checks (uses T1's fixtures: HEIC via `sips`, EXIF-rotated, panorama, tiny, 50-photo set) | `tests/e2e/` | T1, T7 | 2 |
 | T9 | Verification & hardening pass (verifier agent): full matrix, perf, memory | read-only + bug reports | T5, T7, T8 | 3 |
 | T10 | Fix-up tasks from T9 findings | per finding | T9 | 3 |
+| T11 | Contract v2: multi-photo shots (`Cell`, `Shot`, grouping settings, defaults) | `src/types.ts`, `src/lib/`, docs | — | 4 (orchestrator) |
+| T12 | Engine: grouping, layout rects, per-shot timing + stagger, cell motion, `groupPhotos`/`photosOf`/`cellPixelSize` | `src/engine/` | T11 | 4 |
+| T13 | Renderer: `renderShot`, cell composite (rotation, AA edge, polaroid border/shadow, reveal), per-cell blur cache; v1 fast path | `src/render/` (core), `harness/render.*` | T11 | 4 |
+| T14 | Residency by shot + cell-size decode (export + preview), shot navigation | `src/export/`, `src/app/` | T12 | 4 |
+| T15 | UI: Layouts group, inspector grouping, strip brackets, shot summary | `src/ui/` | T12 | 4 |
+| T16 | E2E + verification: `'off'` pixel-identical to main, `auto` mixed orientation, `mixed` + stagger all layouts | `tests/e2e/`, `reports/` | T12–T15 | 4 |
 
 ### Acceptance criteria per task (agents must self-verify)
 

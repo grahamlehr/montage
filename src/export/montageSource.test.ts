@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../lib/constants';
-import type { ExportRequest, PhotoSource } from '../types';
+import type { ExportRequest, FrameDescriptor, PhotoSource, Shot, Timeline } from '../types';
+import { shotTimeline } from './shotFixtures';
 
 interface FakeBitmap {
   index: number;
@@ -12,10 +13,33 @@ const created: FakeBitmap[] = [];
 /** resident[i] = bitmap currently set on the fake renderer for photo i */
 const resident = new Map<number, FakeBitmap>();
 const drawn: Array<{ t: number; resident: number[]; photos: number[] }> = [];
+/** decode bounds requested per photo index */
+const decodeSizes = new Map<number, { maxW: number; maxH: number }>();
+/** photos per shot for the next buildTimeline() call; default = one photo per shot (v1) */
+let shotSizes: number[] | null = null;
+/** true = use the real buildTimeline/frameAt (loop tests); false = hand-built shot timelines */
+let realEngine = false;
+
+vi.mock('../engine', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../engine')>();
+  return {
+    ...real,
+    buildTimeline: (...args: Parameters<typeof real.buildTimeline>) => {
+      if (realEngine) return real.buildTimeline(...args);
+      const [photos, , settings] = args;
+      return {
+        ok: true,
+        timeline: shotTimeline(shotSizes ?? photos.map(() => 1), settings.totalDuration, 0.5, settings.fps),
+      };
+    },
+    frameAt: (tl: Timeline, t: number) => (realEngine ? real.frameAt(tl, t) : { time: t }),
+  };
+});
 
 vi.mock('../ingest', () => ({
-  decodeSizeFor: () => ({ width: 8, height: 8 }),
-  decodePhoto: async (file: File) => {
+  decodeSizeFor: (out: { width: number; height: number }) => ({ maxW: out.width, maxH: out.height }),
+  decodePhoto: async (file: File, size: { maxW: number; maxH: number }) => {
+    decodeSizes.set(Number(file.name.replace(/\D/g, '')), size);
     await Promise.resolve();
     const bmp: FakeBitmap = {
       index: Number(file.name.replace(/\D/g, '')),
@@ -37,8 +61,9 @@ vi.mock('../render', () => ({
       if (bmp) resident.set(i, bmp);
       else resident.delete(i);
     },
-    draw(frame: { kind: string; layer?: { photoIndex: number }; from?: { photoIndex: number }; to?: { photoIndex: number } }) {
-      const photos = frame.kind === 'single' ? [frame.layer!.photoIndex] : [frame.from!.photoIndex, frame.to!.photoIndex];
+    draw(frame: Partial<FrameDescriptor & { kind: 'single' }> & Partial<FrameDescriptor & { kind: 'transition' }>) {
+      const ids = (shot?: Shot) => shot?.cells.map((c) => c.photoIndex) ?? [];
+      const photos = frame.kind === 'single' ? ids(frame.shot) : [...ids(frame.from), ...ids(frame.to)];
       drawn.push({ t: -1, resident: [...resident.keys()].sort((a, b) => a - b), photos });
     },
     dispose() {},
@@ -66,6 +91,9 @@ beforeEach(() => {
   created.length = 0;
   resident.clear();
   drawn.length = 0;
+  decodeSizes.clear();
+  shotSizes = null;
+  realEngine = false;
 });
 
 describe('createMontageSource residency and rewind', () => {
@@ -122,10 +150,36 @@ describe('createMontageSource residency and rewind', () => {
     await flush();
     expect(created.every((b) => b.closed)).toBe(true);
   });
+
+  it('multi-photo shots: whole shots resident, decoded at cell size, released after passing', async () => {
+    shotSizes = [1, 4, 2, 1]; // photos 0 | 1 2 3 4 | 5 6 | 7 — slots of 2.5 s
+    const src = createMontageSource();
+    const progress: Array<[number, number]> = [];
+    await src.init({} as OffscreenCanvas, request(8), (d, t) => progress.push([d, t]));
+    // initial decode = photos of shots 0 and 1
+    expect(progress.at(-1)).toEqual([5, 5]);
+    expect([...resident.keys()].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect(decodeSizes.get(0)).toEqual({ maxW: 320, maxH: 240 });
+    expect(decodeSizes.get(1)).toEqual({ maxW: 160, maxH: 120 });
+
+    await src.draw(30, 3); // inside the quad: shots 0..2 resident
+    expect([...resident.keys()].sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(decodeSizes.get(5)).toEqual({ maxW: 160, maxH: 240 });
+
+    await src.draw(80, 8); // last shot: shots 2..3 resident, quad released
+    expect([...resident.keys()].sort()).toEqual([5, 6, 7]);
+    const quadBitmaps = created.filter((b) => b.index >= 1 && b.index <= 4);
+    expect(quadBitmaps.every((b) => b.closed)).toBe(true);
+
+    src.dispose();
+    await flush();
+    expect(created.every((b) => b.closed)).toBe(true);
+  });
 });
 
 describe('createMontageSource with a seamless loop (§4.9)', () => {
   it('every drawn frame has its photos resident and live, including the wrap back to photo 0', async () => {
+    realEngine = true;
     for (const n of [1, 2, 3, 6]) {
       created.length = 0;
       resident.clear();

@@ -11,3 +11,9 @@ export function lerp(a: number, b: number, t: number): number {
 export function clamp(x: number, lo: number, hi: number): number {
   return x < lo ? lo : x > hi ? hi : x;
 }
+
+/** Cubic ease-out on [0, 1]; input is clamped. */
+export function easeOut(x: number): number {
+  const t = x <= 0 ? 0 : x >= 1 ? 1 : x;
+  return 1 - Math.pow(1 - t, 3);
+}

@@ -6,7 +6,8 @@ export { PerPhotoInspector } from './PerPhotoInspector';
 export { useMontageStore } from './store';
 export type { MontageState } from './store';
 export type { PhotoItem, DimensionPreset } from './types';
-export type { TimingEstimate } from './logic';
+export type { TimingEstimate, ShotMembership } from './logic';
+export { useShots } from './shots';
 export {
   DIMENSION_PRESETS, applySettingsPatch, applySettingsPatchDetailed, lockedDims, dimsForRatio, maxEvenWidthFor, estimateTiming, formatBytes, parseRatio, shuffleItems, arrayMove,
 } from './logic';

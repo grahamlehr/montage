@@ -1,11 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../lib/constants';
-import type { FrameDescriptor, MontageSettings, PhotoOverrides, Timeline, TransitionStyle } from '../types';
+import type { FrameDescriptor, Layer, MontageSettings, PhotoOverrides, Segment, Shot, Timeline, TransitionStyle } from '../types';
 import { buildTimeline, frameAt, resolveStyles, timingSummary } from './index';
 import { GOLDEN_CONFIGS } from './golden-configs';
 import golden from './golden-noloop.json';
 
-const photos = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }));
+const photos = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, naturalWidth: 1600, naturalHeight: 1200 }));
+/** Photo 0's layer in a shot (single-cell shots unless the test groups photos). */
+const cell0 = (shot: Shot): Layer => shot.cells[0]!;
+
+/** v1 shapes, for comparing grouping-off output against the pre-#25 golden (captured before contract v2). */
+const v1Layer = (l: Layer) => ({ photoIndex: l.photoIndex, fit: l.fit, focus: l.focus, transform: l.transform });
+function v1Frame(f: FrameDescriptor): unknown {
+  return f.kind === 'single'
+    ? { kind: 'single', layer: v1Layer(cell0(f.shot)) }
+    : { kind: 'transition', style: f.style, progress: f.progress, from: v1Layer(cell0(f.from)), to: v1Layer(cell0(f.to)) };
+}
+function v1Timeline(tl: Timeline): unknown {
+  const seg = (s: Segment) => {
+    const c = s.cells[0]!;
+    return { photoIndex: c.photoIndex, start: s.start, end: s.end, motion: c.motion, motionFrom: c.motionFrom, motionTo: c.motionTo, fit: c.fit, focus: c.focus, transitionIn: s.transitionIn };
+  };
+  return { duration: tl.duration, fps: tl.fps, frameCount: tl.frameCount, segments: tl.segments.map(seg) };
+}
 const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, loop: true, ...o });
 function build(n: number, o: Partial<MontageSettings> = {}, ov: Record<string, PhotoOverrides> = {}): Timeline {
   const r = buildTimeline(photos(n), ov, S(o));
@@ -24,10 +41,11 @@ describe('loop=false is unchanged (golden captured before #25)', () => {
       if (!r.ok) return;
       const tl = r.timeline;
       expect(tl.loop).toBe(false);
-      expect(JSON.parse(JSON.stringify({ ...tl, loop: undefined }))).toEqual(g.timeline);
+      expect(tl.segments.every((sg) => sg.cells.length === 1)).toBe(true);
+      expect(JSON.parse(JSON.stringify(v1Timeline(tl)))).toEqual(g.timeline);
       const frames: FrameDescriptor[] = [];
       for (let i = 0; i <= 40; i++) frames.push(frameAt(tl, (tl.duration * i) / 40));
-      expect(JSON.parse(JSON.stringify(frames))).toEqual(g.frames);
+      expect(JSON.parse(JSON.stringify(frames.map(v1Frame)))).toEqual(g.frames);
     });
   });
 });
@@ -120,18 +138,18 @@ describe('loop timeline invariants (§4.1, §4.9)', () => {
     const f = frameAt(tl, 30 - w.duration / 2);
     expect(f.kind).toBe('transition');
     if (f.kind === 'transition') {
-      expect(f.from.photoIndex).toBe(0);
-      expect(f.to.photoIndex).toBe(0);
+      expect(cell0(f.from).photoIndex).toBe(0);
+      expect(cell0(f.to).photoIndex).toBe(0);
     }
     expect(frameAt(tl, 30)).toEqual(frameAt(tl, 0));
   });
 
   it('timingSummary accounts for N transitions', () => {
-    const s = timingSummary(10, S({ totalDuration: 30, transitionSpeed: 0.5 }));
-    expect(s.avgPhoto).toBeCloseTo((30 + 10 * s.transition) / 10, 6);
+    const s = timingSummary(photos(10), S({ totalDuration: 30, transitionSpeed: 0.5 }));
+    expect(s.avgShot).toBeCloseTo((30 + 10 * s.transition) / 10, 6);
     const tl = build(10, { transitionSpeed: 0.5 });
     const avg = tl.segments.reduce((a, g) => a + g.end - g.start, 0) / 10;
-    expect(s.avgPhoto).toBeCloseTo(avg, 6);
+    expect(s.avgShot).toBeCloseTo(avg, 6);
   });
 
   it('is deterministic', () => {
@@ -175,14 +193,15 @@ describe('loop frames', () => {
     expect(f.kind).toBe('transition');
     if (f.kind !== 'transition') return;
     expect(f.progress).toBeCloseTo(0.5, 9);
-    expect(f.from.photoIndex).toBe(3);
-    expect(f.to.photoIndex).toBe(0);
+    expect(cell0(f.from).photoIndex).toBe(3);
+    expect(cell0(f.to).photoIndex).toBe(0);
     // Photo 0's motion is already underway (started at −T_wrap) and matches frameAt just after the seam.
     const s0 = tl.segments[0]!;
     const u = (t - tl.duration - s0.start) / (s0.end - s0.start);
     expect(u).toBeGreaterThan(0);
-    expect(f.to.transform.scale).toBeGreaterThan(s0.motionFrom.scale);
-    expect(f.to.transform.scale).toBeLessThan(frameAt(tl, 0).kind === 'single' ? (frameAt(tl, 0) as { layer: { transform: { scale: number } } }).layer.transform.scale : 0);
+    const f0 = frameAt(tl, 0);
+    expect(cell0(f.to).transform.scale).toBeGreaterThan(s0.cells[0]!.motionFrom.scale);
+    expect(cell0(f.to).transform.scale).toBeLessThan(f0.kind === 'single' ? cell0(f0.shot).transform.scale : 0);
   });
 
   it('continuity across the seam: progress → 1 and photo 0 transform → its t=0 value', () => {
@@ -196,9 +215,9 @@ describe('loop frames', () => {
         expect(before.kind).toBe('transition');
         if (before.kind !== 'transition' || at0.kind !== 'single') continue;
         expect(before.progress).toBeGreaterThan(0.999);
-        expect(before.to.photoIndex).toBe(0);
-        const a = before.to.transform;
-        const b = at0.layer.transform;
+        expect(cell0(before.to).photoIndex).toBe(0);
+        const a = cell0(before.to).transform;
+        const b = cell0(at0.shot).transform;
         expect(Math.abs(a.scale - b.scale)).toBeLessThan(1e-3);
         expect(Math.abs(a.tx - b.tx)).toBeLessThan(1e-3);
         expect(Math.abs(a.ty - b.ty)).toBeLessThan(1e-3);
@@ -210,5 +229,55 @@ describe('loop frames', () => {
     const tl = build(3);
     expect(frameAt(tl, -5)).toEqual(frameAt(tl, 0));
     expect(frameAt(tl, NaN)).toEqual(frameAt(tl, 0));
+  });
+});
+
+describe('loop with multi-photo shots (§4.9 × §4.10)', () => {
+  // Portraits in landscape output: `auto` pairs them into duos.
+  const portraits = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, naturalWidth: 1200, naturalHeight: 1600 }));
+  const buildShots = (n: number, o: Partial<MontageSettings>): Timeline => {
+    const r = buildTimeline(portraits(n), {}, S({ width: 1920, height: 1080, ...o }));
+    if (!r.ok) throw new Error(r.error);
+    return r.timeline;
+  };
+  const photosIn = (shot: Shot) => shot.cells.map((c) => c.photoIndex);
+
+  for (const reveal of ['together', 'stagger'] as const) {
+    for (const grouping of ['auto', 'mixed'] as const) {
+      it(`${grouping} + ${reveal}: wrap goes last shot → shot 0 and the seam is continuous`, () => {
+        for (const n of [2, 5, 9]) {
+          const tl = buildShots(n, { grouping, reveal, layoutPool: ['duo', 'trio', 'quad', 'pip', 'polaroid'], seed: n, motionIntensity: 1 });
+          const segs = tl.segments;
+          const w = wrapOf(tl);
+          expect(segs[0]!.start).toBeCloseTo(-w.duration, 9);
+          expect(segs.at(-1)!.end).toBe(tl.duration);
+          expect(frameAt(tl, tl.duration)).toEqual(frameAt(tl, 0));
+          const mid = frameAt(tl, tl.duration - w.duration / 2);
+          expect(mid.kind).toBe('transition');
+          if (mid.kind !== 'transition') continue;
+          expect(photosIn(mid.from)).toEqual(segs.at(-1)!.cells.map((c) => c.photoIndex));
+          expect(photosIn(mid.to)).toEqual(segs[0]!.cells.map((c) => c.photoIndex));
+          const before = frameAt(tl, tl.duration - 1e-4);
+          const at0 = frameAt(tl, 0);
+          if (before.kind !== 'transition' || at0.kind !== 'single') throw new Error('expected wrap then single');
+          before.to.cells.forEach((c, k) => {
+            const d = at0.shot.cells[k]!;
+            expect(Math.abs(c.transform.scale - d.transform.scale)).toBeLessThan(1e-3);
+            expect(Math.abs(c.reveal - d.reveal)).toBeLessThan(1e-3);
+          });
+        }
+      });
+    }
+  }
+
+  it('stagger in shot 0 starts after the seam, never during the wrap', () => {
+    const tl = buildShots(4, { grouping: 'auto', reveal: 'stagger' });
+    const s0 = tl.segments[0]!;
+    expect(s0.cells.length).toBe(2);
+    expect(s0.cells[0]!.revealDuration).toBe(0);
+    expect(s0.cells[1]!.revealStart).toBeGreaterThanOrEqual(0);
+    const wrapMid = frameAt(tl, tl.duration - wrapOf(tl).duration / 2);
+    if (wrapMid.kind !== 'transition') throw new Error('expected wrap');
+    expect(wrapMid.to.cells[1]!.reveal).toBe(0);
   });
 });

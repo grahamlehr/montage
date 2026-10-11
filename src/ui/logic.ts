@@ -1,9 +1,11 @@
 import {
-  DIM_MAX, DIM_MIN, DURATION_MAX, DURATION_MIN, MAX_MACROBLOCKS, TRANSITION_FAST, TRANSITION_SLOW, clampEvenDim,
+  DIM_MAX, DIM_MIN, DURATION_MAX, DURATION_MIN, GUTTER_MAX, MAX_MACROBLOCKS, TRANSITION_FAST, TRANSITION_SLOW, clampEvenDim,
   fitsEncoderArea, macroblocks, maxEvenHeightFor,
 } from '../lib/constants';
 import { mulberry32, shuffle } from '../lib/rng';
-import type { FitMode, MontageSettings, MotionStyle, PhotoOverrides, TransitionStyle } from '../types';
+import type {
+  FitMode, Grouping, LayoutStyle, MontageSettings, MotionStyle, MultiLayout, PhotoOverrides, TransitionStyle,
+} from '../types';
 import type { DimensionPreset } from './types';
 
 /** PLAN.md §4.5 presets. */
@@ -28,6 +30,18 @@ export const TRANSITION_STYLES: readonly TransitionStyle[] = [
 ];
 export const FIT_MODES: readonly FitMode[] = ['cover', 'contain', 'blur'];
 export const QUALITIES = ['standard', 'high', 'max'] as const;
+export const GROUPINGS: readonly Grouping[] = ['off', 'auto', 'mixed'];
+export const MULTI_LAYOUTS: readonly MultiLayout[] = ['duo', 'trio', 'quad', 'pip', 'polaroid'];
+
+export const GROUPING_LABELS: Record<Grouping, string> = { off: 'Off', auto: 'Auto', mixed: 'Mixed' };
+export const GROUPING_HINTS: Record<Grouping, string> = {
+  off: 'One photo per shot.',
+  auto: 'Pairs photos that fight the frame (portraits in landscape, landscapes in portrait) side by side.',
+  mixed: 'Auto, plus occasional multi-photo shots drawn from the layouts below.',
+};
+export const LAYOUT_LABELS: Record<LayoutStyle, string> = {
+  single: 'Single', duo: 'Duo', trio: 'Trio', quad: 'Quad', pip: 'Picture-in-picture', polaroid: 'Polaroid stack',
+};
 
 export const STYLE_LABELS: Record<string, string> = {
   none: 'None', kenBurns: 'Ken Burns', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
@@ -240,6 +254,13 @@ export function applySettingsPatchDetailed(
   if (typeof patch.background === 'string' && isHexColour(patch.background)) next.background = patch.background.toLowerCase();
   if (typeof patch.loop === 'boolean') next.loop = patch.loop;
   if (patch.quality && (QUALITIES as readonly string[]).includes(patch.quality)) next.quality = patch.quality;
+  if (patch.grouping && GROUPINGS.includes(patch.grouping)) next.grouping = patch.grouping;
+  if (patch.layoutPool) {
+    const pool = MULTI_LAYOUTS.filter((l) => patch.layoutPool?.includes(l));
+    if (pool.length >= 1) next.layoutPool = pool;
+  }
+  if (finite(patch.gutter)) next.gutter = clamp(patch.gutter, 0, GUTTER_MAX);
+  if (patch.reveal === 'together' || patch.reveal === 'stagger') next.reveal = patch.reveal;
   return { settings: next, areaClamp };
 }
 
@@ -279,26 +300,57 @@ export function mergeOverride(
   return Object.keys(merged).length ? (merged as PhotoOverrides) : undefined;
 }
 
+/** Same shape as the engine's `timingSummary()` (per shot; a shot holds 1–4 photos). */
 export interface TimingEstimate {
   transition: number;
-  avgPhoto: number;
-  minPhoto: number;
+  avgShot: number;
+  minShot: number;
+  shots: number;
   ok: boolean;
 }
 
-/** Local fallback estimate (§4.1) used when the engine's timing isn't injected. */
-export function estimateTiming(s: MontageSettings, photoCount: number): TimingEstimate {
-  const n = Math.max(1, photoCount);
+/** Local even-split estimate (§4.1) for `shotCount` shots, used when the engine's timing isn't injected. */
+export function estimateTiming(s: MontageSettings, shotCount: number): TimingEstimate {
+  const n = Math.max(1, shotCount);
   const count = s.loop ? n : n - 1; // a seamless loop adds the wrap transition (§4.9)
   let transition = count <= 0 ? 0 : TRANSITION_SLOW + (TRANSITION_FAST - TRANSITION_SLOW) * s.transitionSpeed;
-  let avgPhoto = (s.totalDuration + count * transition) / n;
-  if (transition > 0.45 * avgPhoto) {
-    // transitions are clamped to 45% of the photo duration (§4.1 step 4)
-    avgPhoto = s.totalDuration / (n - 0.45 * count);
-    transition = 0.45 * avgPhoto;
+  let avgShot = (s.totalDuration + count * transition) / n;
+  if (transition > 0.45 * avgShot) {
+    // transitions are clamped to 45% of the shot duration (§4.1 step 4)
+    avgShot = s.totalDuration / (n - 0.45 * count);
+    transition = 0.45 * avgShot;
   }
-  const minPhoto = avgPhoto * (1 - 0.6 * s.pacing);
-  return { transition, avgPhoto, minPhoto, ok: avgPhoto >= 0.25 };
+  const minShot = avgShot * (1 - 0.6 * s.pacing);
+  return { transition, avgShot, minShot, shots: Math.max(0, shotCount), ok: avgShot >= 0.25 };
+}
+
+/** "12 shots · avg 2.4 s". */
+export function shotSummaryText(t: Pick<TimingEstimate, 'shots' | 'avgShot'>): string {
+  return `${t.shots} ${t.shots === 1 ? 'shot' : 'shots'} · avg ${formatSeconds(t.avgShot)}`;
+}
+
+/** Where a photo sits in its shot, for strip brackets and the inspector. */
+export interface ShotMembership {
+  shotIndex: number;
+  layout: LayoutStyle;
+  /** Position within the shot (0 = first photo, which owns the shot's transition). */
+  position: number;
+  size: number;
+  /** Alternates 0/1 between consecutive multi-photo shots so neighbouring brackets stay distinguishable. */
+  tone: 0 | 1;
+}
+
+/** Per-photo membership from `groupPhotos()` output; entry i describes photo i. */
+export function shotMembership(groups: ReadonlyArray<{ layout: LayoutStyle; photoIndices: readonly number[] }>, photoCount: number): ShotMembership[] {
+  const out: ShotMembership[] = Array.from({ length: photoCount }, (_, i) => ({ shotIndex: i, layout: 'single', position: 0, size: 1, tone: 0 }));
+  let multi = 0;
+  groups.forEach((g, shotIndex) => {
+    const tone = (g.photoIndices.length > 1 ? multi++ % 2 : 0) as 0 | 1;
+    g.photoIndices.forEach((photoIndex, position) => {
+      if (photoIndex >= 0 && photoIndex < photoCount) out[photoIndex] = { shotIndex, layout: g.layout, position, size: g.photoIndices.length, tone };
+    });
+  });
+  return out;
 }
 
 export function formatBytes(bytes: number): string {

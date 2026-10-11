@@ -28,6 +28,30 @@ export type TransitionStyle =
 
 export type StyleSelection = 'sequence' | 'random';
 
+/** How a shot arranges its photos. `single` = one full-frame cell (v1 behaviour). PLAN.md §4.10. */
+export type LayoutStyle = 'single' | 'duo' | 'trio' | 'quad' | 'pip' | 'polaroid';
+export type MultiLayout = Exclude<LayoutStyle, 'single'>;
+
+/**
+ * off   = one photo per shot (default; output identical to v1).
+ * auto  = pair consecutive photos whose orientation fights the output (portraits in landscape, landscapes in portrait).
+ * mixed = auto, plus seeded multi-photo shots drawn from `layoutPool`.
+ */
+export type Grouping = 'off' | 'auto' | 'mixed';
+
+/** together = all cells visible from the shot's start; stagger = cells 1..n pop in one after another. */
+export type CellReveal = 'together' | 'stagger';
+
+export type CellBorder = 'none' | 'polaroid';
+
+/** Rectangle in output-frame fractions (0..1), origin TOP-LEFT, +y down. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface PhotoSource {
   id: string;
   file: File;
@@ -38,9 +62,10 @@ export interface PhotoSource {
 
 export interface PhotoOverrides {
   motion?: MotionStyle;
-  transitionIn?: TransitionStyle; // transition INTO this photo (for photo 0: the wrap transition when looping, else ignored)
+  transitionIn?: TransitionStyle; // transition INTO this photo's shot; honoured only on a shot's FIRST photo. For photo 0: the wrap transition when looping, else ignored
   fit?: FitMode;
   focus?: { x: number; y: number }; // 0..1 focal point for cover crop / motion target
+  group?: 'solo' | 'joinNext'; // never group this photo / force it into a shot with the next photo
 }
 
 export interface MontageSettings {
@@ -58,6 +83,10 @@ export interface MontageSettings {
   fit: FitMode;
   background: string; // CSS hex, used for contain letterbox
   quality: 'standard' | 'high' | 'max';
+  grouping: Grouping; // default 'off'
+  layoutPool: MultiLayout[]; // ≥1 enabled layouts, used when grouping = 'mixed'
+  gutter: number; // 0..0.04 of the shorter output side, filled with `background`
+  reveal: CellReveal;
   /**
    * Seamless loop (#25). When true the montage ends with a transition from the last photo back
    * into the first, so frameAt(duration) equals frameAt(0) and the MP4 loops without a seam.
@@ -66,19 +95,31 @@ export interface MontageSettings {
   loop: boolean;
 }
 
-/** Fully resolved, deterministic plan for the whole video. */
-export interface Segment {
+/** One photo placed inside a shot. Per-photo motion/fit/focus live here (v1 had them on Segment). */
+export interface Cell {
   photoIndex: number;
-  start: number; // seconds, photo first visible (start of its transition-in)
-  end: number; // seconds, photo last visible (end of transition-out)
+  rect: Rect; // gutter applied; {0,0,1,1} for a single-photo shot
+  rotation: number; // radians about the rect centre (polaroid tilt); 0 otherwise
+  border: CellBorder;
   motion: MotionStyle;
-  motionFrom: Transform; // transform at `start`
-  motionTo: Transform; // transform at `end`
+  motionFrom: Transform; // transform at segment `start`; tx/ty in CELL fractions (= frame fractions when rect is full)
+  motionTo: Transform; // transform at segment `end`
   fit: FitMode;
   focus: { x: number; y: number };
+  revealStart: number; // seconds (absolute); == segment.start unless staggered
+  revealDuration: number; // seconds; 0 = present from revealStart
+}
+
+/** Fully resolved, deterministic plan for the whole video. A segment is one SHOT of 1..4 cells. */
+export interface Segment {
+  layout: LayoutStyle;
+  cells: Cell[]; // ≥1, consecutive photoIndex ascending, draw order back→front
+  backdrop: number | null; // photoIndex whose blurred cover fills behind the cells; null = background colour
+  start: number; // seconds, shot first visible (start of its transition-in; −wrapDuration for shot 0 when looping)
+  end: number; // seconds, shot last visible (end of transition-out)
   /**
-   * Transition INTO this photo. Null for photo 0 unless the timeline loops: then segment 0's
-   * transitionIn is the wrap transition from the last photo, played at the END of the video
+   * Transition INTO this shot. Null for shot 0 unless the timeline loops: then segment 0's
+   * transitionIn is the wrap transition from the last shot, played at the END of the video
    * (start = duration − wrapDuration), and segment 0's `start` is −wrapDuration (its motion
    * begins during the wrap, so motion is continuous across the loop point).
    */
@@ -109,9 +150,23 @@ export interface Layer {
   transform: Transform; // eased, at time t
 }
 
+/** A cell at time t. */
+export interface CellLayer extends Layer {
+  rect: Rect;
+  rotation: number;
+  border: CellBorder;
+  reveal: number; // 0..1 eased; 0 = not drawn, 1 = fully placed
+}
+
+/** Everything drawn for one shot at time t; the renderer composites it into one full-frame texture. */
+export interface Shot {
+  backdrop: Layer | null; // drawn full-frame (cover, blurred + darkened) before the cells
+  cells: CellLayer[];
+}
+
 export type FrameDescriptor =
-  | { kind: 'single'; layer: Layer }
-  | { kind: 'transition'; style: TransitionStyle; progress: number /*0..1 eased*/; from: Layer; to: Layer };
+  | { kind: 'single'; shot: Shot }
+  | { kind: 'transition'; style: TransitionStyle; progress: number /*0..1 eased*/; from: Shot; to: Shot };
 
 export interface Renderer {
   setSize(width: number, height: number): void;

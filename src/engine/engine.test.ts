@@ -11,7 +11,7 @@ import {
   transitionDuration,
 } from './index';
 
-const photos = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }));
+const photos = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, naturalWidth: 1600, naturalHeight: 1200 }));
 const S = (o: Partial<MontageSettings> = {}): MontageSettings => ({ ...DEFAULT_SETTINGS, loop: false, ...o });
 function build(n: number, o: Partial<MontageSettings> = {}, ov: Record<string, PhotoOverrides> = {}): Timeline {
   const r = buildTimeline(photos(n), ov, S(o));
@@ -180,8 +180,8 @@ describe('style assignment (§4.3)', () => {
 
   it('overrides for fit and focus reach the segment; default focus is centred', () => {
     const tl = build(2, {}, { p1: { fit: 'contain', focus: { x: 0.2, y: 0.9 } } });
-    expect(tl.segments[0]).toMatchObject({ fit: 'blur', focus: { x: 0.5, y: 0.5 } });
-    expect(tl.segments[1]).toMatchObject({ fit: 'contain', focus: { x: 0.2, y: 0.9 } });
+    expect(tl.segments[0]!.cells[0]).toMatchObject({ fit: 'blur', focus: { x: 0.5, y: 0.5 } });
+    expect(tl.segments[1]!.cells[0]).toMatchObject({ fit: 'contain', focus: { x: 0.2, y: 0.9 } });
   });
 
   it('changing the transition pool does not reshuffle motion choices', () => {
@@ -273,8 +273,8 @@ describe('frameAt', () => {
     const f = frameAt(tl, 0);
     expect(f.kind).toBe('single');
     if (f.kind === 'single') {
-      expect(f.layer.photoIndex).toBe(0);
-      expect(f.layer.transform).toEqual(tl.segments[0]!.motionFrom);
+      expect(f.shot.cells[0]!.photoIndex).toBe(0);
+      expect(f.shot.cells[0]!.transform).toEqual(tl.segments[0]!.cells[0]!.motionFrom);
     }
   });
 
@@ -288,9 +288,9 @@ describe('frameAt', () => {
     const f = frameAt(tl, tl.duration);
     expect(f.kind).toBe('single');
     if (f.kind === 'single') {
-      expect(f.layer.photoIndex).toBe(3);
-      expect(f.layer.transform.scale).toBeCloseTo(tl.segments[3]!.motionTo.scale, 12);
-      expect(f.layer.transform.tx).toBeCloseTo(tl.segments[3]!.motionTo.tx, 12);
+      expect(f.shot.cells[0]!.photoIndex).toBe(3);
+      expect(f.shot.cells[0]!.transform.scale).toBeCloseTo(tl.segments[3]!.cells[0]!.motionTo.scale, 12);
+      expect(f.shot.cells[0]!.transform.tx).toBeCloseTo(tl.segments[3]!.cells[0]!.motionTo.tx, 12);
     }
   });
 
@@ -300,8 +300,8 @@ describe('frameAt', () => {
     if (f.kind === 'transition') {
       expect(f.style).toBe(tr.style);
       expect(f.progress).toBeCloseTo(0.5, 9);
-      expect(f.from.photoIndex).toBe(0);
-      expect(f.to.photoIndex).toBe(1);
+      expect(f.from.cells[0]!.photoIndex).toBe(0);
+      expect(f.to.cells[0]!.photoIndex).toBe(1);
     }
     const early = frameAt(tl, tr.start + tr.duration * 0.25);
     if (early.kind === 'transition') {
@@ -315,7 +315,7 @@ describe('frameAt', () => {
     expect(f0.kind === 'transition' && f0.progress).toBe(0);
     const f1 = frameAt(tl, tr.start + tr.duration);
     expect(f1.kind).toBe('single');
-    if (f1.kind === 'single') expect(f1.layer.photoIndex).toBe(1);
+    if (f1.kind === 'single') expect(f1.shot.cells[0]!.photoIndex).toBe(1);
   });
 
   it('progress is monotonic across the transition', () => {
@@ -335,33 +335,34 @@ describe('frameAt', () => {
     const s = t.segments[0]!;
     const mid = frameAt(t, (s.start + s.end) / 2);
     expect(mid.kind).toBe('single');
-    if (mid.kind === 'single') expect(mid.layer.transform.scale).toBeCloseTo(1 + MAX_ZOOM_DELTA / 2, 9);
+    if (mid.kind === 'single') expect(mid.shot.cells[0]!.transform.scale).toBeCloseTo(1 + MAX_ZOOM_DELTA / 2, 9);
     const tr1 = t.segments[1]!.transitionIn!;
     const f = frameAt(t, tr1.start + 0.01);
     if (f.kind === 'transition') {
-      expect(f.from.transform.scale).toBeGreaterThan(1.2); // outgoing photo is still moving
-      expect(f.to.transform.scale).toBeCloseTo(1, 2); // incoming starts at its motionFrom
+      expect(f.from.cells[0]!.transform.scale).toBeGreaterThan(1.2); // outgoing photo is still moving
+      expect(f.to.cells[0]!.transform.scale).toBeCloseTo(1, 2); // incoming starts at its motionFrom
     }
   });
 
   it('cut transitions have zero duration and never produce a transition frame', () => {
     const t = build(5, { totalDuration: 10, transitionPool: ['cut'] });
-    for (const s of t.segments.slice(1)) {
+    for (const [k, s] of t.segments.entries()) {
+      if (k === 0) continue;
       expect(s.transitionIn).toMatchObject({ style: 'cut', duration: 0 });
-      expect(s.start).toBe(t.segments[s.photoIndex - 1]!.end);
+      expect(s.start).toBe(t.segments[k - 1]!.end);
     }
     for (let k = 0; k <= 400; k++) expect(frameAt(t, (10 * k) / 400).kind).toBe('single');
     const cutAt = t.segments[2]!.start;
     const before = frameAt(t, cutAt - 1e-6);
     const at = frameAt(t, cutAt);
-    expect(before.kind === 'single' && before.layer.photoIndex).toBe(1);
-    expect(at.kind === 'single' && at.layer.photoIndex).toBe(2);
+    expect(before.kind === 'single' && before.shot.cells[0]!.photoIndex).toBe(1);
+    expect(at.kind === 'single' && at.shot.cells[0]!.photoIndex).toBe(2);
   });
 
   it('sweeping every frame always yields valid descriptors', () => {
     for (let i = 0; i < tl.frameCount; i++) {
       const f = frameAt(tl, i / tl.fps);
-      const l = f.kind === 'single' ? f.layer : f.to;
+      const l = (f.kind === 'single' ? f.shot : f.to).cells[0]!;
       expect(l.photoIndex).toBeGreaterThanOrEqual(0);
       expect(l.photoIndex).toBeLessThan(4);
     }
@@ -369,13 +370,14 @@ describe('frameAt', () => {
 });
 
 describe('timingSummary', () => {
-  it('reports transition, avg photo, min photo and ok', () => {
-    const s = timingSummary(10, S({ totalDuration: 30, transitionSpeed: 0.5 }));
+  it('reports transition, avg shot, min shot, shot count and ok', () => {
+    const s = timingSummary(photos(10), S({ totalDuration: 30, transitionSpeed: 0.5 }));
     expect(s.transition).toBeCloseTo(0.8, 1);
-    expect(s.avgPhoto).toBeCloseTo((30 + 9 * s.transition) / 10, 6);
-    expect(s.minPhoto).toBeCloseTo(s.avgPhoto, 6);
+    expect(s.avgShot).toBeCloseTo((30 + 9 * s.transition) / 10, 6);
+    expect(s.minShot).toBeCloseTo(s.avgShot, 6);
     expect(s.ok).toBe(true);
-    expect(timingSummary(500, S({ totalDuration: 30 })).ok).toBe(false);
-    expect(timingSummary(0, S()).ok).toBe(false);
+    expect(s.shots).toBe(10);
+    expect(timingSummary(photos(500), S({ totalDuration: 30 })).ok).toBe(false);
+    expect(timingSummary(photos(0), S()).ok).toBe(false);
   });
 });

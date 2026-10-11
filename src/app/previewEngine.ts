@@ -1,16 +1,18 @@
 import { frameAt } from '../engine';
-import { decodePhoto, decodeSizeFor } from '../ingest';
+import { photosForSegments, segmentIndexAt, segmentWindow } from '../export/residency';
+import type { PhotoDecode } from '../export/residency';
+import { decodePhoto } from '../ingest';
 import { createRenderer } from '../render';
 import type { MontageRenderer, RendererStats } from '../render';
 import type { MontageSettings, PhotoSource, Timeline } from '../types';
 
-/** How many photos behind / ahead of the current segment stay resident (§4.6). */
+/** How many shots behind / ahead of the current segment stay resident (§4.6, §4.7.6). */
 const BEHIND = 1;
-const AHEAD = 2; // next photo + one extra lookahead
+const AHEAD = 2; // next shot + one extra lookahead
 
 interface Entry {
   id: string;
-  key: string;
+  key: string; // decode bounds; a photo regrouped into a different cell size re-decodes
   bmp: ImageBitmap | null;
   failed: boolean;
 }
@@ -29,8 +31,9 @@ export interface PreviewHooks {
 }
 
 /**
- * Drives the preview canvas: owns the renderer, a small LRU-ish window of decoded photo bitmaps
- * (decoded at the output size, closed + setPhoto(i, null) on eviction) and the rAF playback clock.
+ * Drives the preview canvas: owns the renderer, a small window of decoded photo bitmaps (the photos of
+ * the shots around the playhead, each decoded at its cell size; closed + setPhoto(i, null) on eviction)
+ * and the rAF playback clock.
  * Plain class so React re-renders never touch the hot path.
  */
 export class PreviewEngine {
@@ -159,34 +162,16 @@ export class PreviewEngine {
     if (this.timeline) this.renderer.draw(frameAt(this.timeline, this.time));
   }
 
-  private segmentIndexAt(t: number): number {
-    const segs = this.timeline?.segments ?? [];
-    let idx = 0;
-    for (let i = segs.length - 1; i > 0; i--) {
-      if ((segs[i]?.start ?? Infinity) <= t) {
-        idx = i;
-        break;
-      }
-    }
-    return idx;
-  }
-
-  private wantedIndices(): number[] {
-    const n = this.timeline?.segments.length ?? 0;
-    if (n === 0) return [];
-    const cur = this.segmentIndexAt(this.time);
-    const out: number[] = [];
-    const push = (i: number) => {
-      let k = i;
-      // On a looping timeline the last segment's next photo is photo 0 (the wrap, §4.9).
-      if (this.timeline?.loop) k = ((i % n) + n) % n;
-      if (k >= 0 && k < n && !out.includes(k)) out.push(k);
-    };
-    push(cur);
-    push(cur - 1);
-    for (let d = 1; d <= AHEAD; d++) push(cur + d);
-    for (let d = 2; d <= BEHIND; d++) push(cur - d);
-    return out;
+  /** Photos of the shots around the playhead, current shot first, with their decode bounds. */
+  private wantedPhotos(): PhotoDecode[] {
+    const timeline = this.timeline;
+    const settings = this.settings;
+    if (!timeline || !settings) return [];
+    const cur = segmentIndexAt(timeline, this.time);
+    // On a looping timeline the last shot's next is shot 0 (the wrap, §4.9).
+    const segs = segmentWindow(timeline.segments.length, cur, BEHIND, AHEAD, timeline.loop);
+    const naturals = this.photos.map((p) => ({ width: p.naturalWidth, height: p.naturalHeight }));
+    return photosForSegments(timeline, segs, { width: settings.width, height: settings.height }, naturals);
   }
 
   private evict(i: number): void {
@@ -199,25 +184,21 @@ export class PreviewEngine {
   }
 
   private syncPhotos(): void {
-    const settings = this.settings;
-    if (!settings) return;
-    const key = `${settings.width}x${settings.height}`;
-    const wanted = this.wantedIndices();
+    if (!this.settings) return;
+    const wanted = new Map<number, string>();
+    const decodes = this.wantedPhotos();
+    for (const d of decodes) wanted.set(d.photoIndex, `${d.maxW}x${d.maxH}`);
     for (const i of [...this.entries.keys()]) {
       const e = this.entries.get(i);
       const photo = this.photos[i];
-      if (!wanted.includes(i) || !photo || !e || e.id !== photo.id || e.key !== key) this.evict(i);
+      if (!photo || !e || e.id !== photo.id || e.key !== wanted.get(i)) this.evict(i);
     }
-    for (const i of wanted) {
+    for (const { photoIndex: i, maxW, maxH } of decodes) {
       const photo = this.photos[i];
       if (!photo || this.entries.has(i)) continue;
-      const entry: Entry = { id: photo.id, key, bmp: null, failed: false };
+      const entry: Entry = { id: photo.id, key: `${maxW}x${maxH}`, bmp: null, failed: false };
       this.entries.set(i, entry);
-      const size = decodeSizeFor(
-        { width: settings.width, height: settings.height },
-        { width: photo.naturalWidth, height: photo.naturalHeight },
-      );
-      decodePhoto(photo.file, size).then(
+      decodePhoto(photo.file, { maxW, maxH }).then(
         (bmp) => {
           if (this.disposed || this.entries.get(i) !== entry) {
             bmp.close(); // evicted while decoding
