@@ -52,6 +52,12 @@ export interface MontageSettings {
   fit: FitMode;
   background: string; // CSS hex, used for contain letterbox
   quality: 'standard' | 'high' | 'max';
+  /**
+   * Seamless loop (#25). When true the montage ends with a transition from the last photo back
+   * into the first, so frameAt(duration) equals frameAt(0) and the MP4 loops without a seam.
+   * Also makes the preview repeat. When false the video ends on the last photo.
+   */
+  loop: boolean;
 }
 
 /** Fully resolved, deterministic plan for the whole video. */
@@ -64,6 +70,12 @@ export interface Segment {
   motionTo: Transform; // transform at `end`
   fit: FitMode;
   focus: { x: number; y: number };
+  /**
+   * Transition INTO this photo. Null for photo 0 unless the timeline loops: then segment 0's
+   * transitionIn is the wrap transition from the last photo, played at the END of the video
+   * (start = duration − wrapDuration), and segment 0's `start` is −wrapDuration (its motion
+   * begins during the wrap, so motion is continuous across the loop point).
+   */
   transitionIn: { style: TransitionStyle; start: number; duration: number } | null;
 }
 
@@ -77,6 +89,7 @@ export interface Timeline {
   duration: number;
   fps: number;
   frameCount: number; // round(duration * fps)
+  loop: boolean; // see MontageSettings.loop
   segments: Segment[];
 }
 
