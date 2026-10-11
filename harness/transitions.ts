@@ -1,7 +1,7 @@
 import { buildTimeline, frameAt } from '../src/engine';
 import { DEFAULT_SETTINGS } from '../src/lib/constants';
 import { createRenderer } from '../src/render';
-import type { FrameDescriptor, Layer, MotionStyle, TransitionStyle } from '../src/types';
+import type { FrameDescriptor, Layer, MotionStyle, Shot, TransitionStyle } from '../src/types';
 
 declare global {
   interface Window {
@@ -107,12 +107,16 @@ const layer = (i: number): Layer => ({
   focus: { x: 0.5, y: 0.5 },
   transform: { scale: 1, tx: 0, ty: 0 },
 });
+const shot = (i: number): Shot => ({
+  backdrop: null,
+  cells: [{ ...layer(i), rect: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0, border: 'none', reveal: 1 }],
+});
 const trans = (style: TransitionStyle, progress: number): FrameDescriptor => ({
   kind: 'transition',
   style,
   progress,
-  from: layer(0),
-  to: layer(1),
+  from: shot(0),
+  to: shot(1),
 });
 
 function readPixels(canvas: HTMLCanvasElement): Uint8ClampedArray {
@@ -190,9 +194,9 @@ async function main() {
     r.setBackground(BG);
     r.setPhoto(0, await labelled('A', '#7a1c1c', '#ff7070', 1600, 1600));
     r.setPhoto(1, await labelled('B', '#1c2c7a', '#7090ff', 1600, 1600));
-    r.draw({ kind: 'single', layer: layer(0) });
+    r.draw({ kind: 'single', shot: shot(0) });
     const pureFrom = readPixels(canvas);
-    r.draw({ kind: 'single', layer: layer(1) });
+    r.draw({ kind: 'single', shot: shot(1) });
     const pureTo = readPixels(canvas);
     const dispH = h > w ? 220 : 120;
     for (const style of STYLES) {
@@ -278,7 +282,7 @@ async function main() {
       });
       addRow(m, strip, 220);
       const [a, b, c] = samples as [ReturnType<typeof dot>, ReturnType<typeof dot>, ReturnType<typeof dot>];
-      const seg = tl.segments[0]!;
+      const seg = tl.segments[0]!.cells[0]!;
       const dx = c.x - a.x,
         dy = c.y - a.y,
         dA = c.area / a.area;
