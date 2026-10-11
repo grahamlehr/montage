@@ -37,10 +37,13 @@ export function buildTimeline(
   const nominalT = transitionDuration(settings.transitionSpeed);
   const nominal: number[] = [];
   for (let j = 0; j < n - 1; j++) nominal.push(styles.transitions[j + 1] === 'cut' ? 0 : nominalT);
-  const { durations, transitions } = solveTiming(weights, L, nominal);
+  const loop = settings.loop === true;
+  if (loop) nominal.push(styles.wrap === 'cut' ? 0 : nominalT);
+  const { durations, transitions } = solveTiming(weights, L, nominal, loop);
+  const wrapT = loop ? (transitions[n - 1] as number) : 0;
 
   const segments: Segment[] = [];
-  let start = 0;
+  let start = 0 - wrapT; // segment 0 begins during the wrap so its motion is continuous across the loop point
   for (let i = 0; i < n; i++) {
     const photo = photos[i] as Pick<PhotoSource, 'id'>;
     const ov = overrides[photo.id];
@@ -66,11 +69,18 @@ export function buildTimeline(
       motionTo: to,
       fit: ov?.fit ?? settings.fit,
       focus,
-      transitionIn: i === 0 || !tStyle ? null : { style: tStyle, start, duration: transitions[i - 1] as number },
+      transitionIn:
+        i === 0
+          ? loop && styles.wrap
+            ? { style: styles.wrap, start: L - wrapT, duration: wrapT }
+            : null
+          : !tStyle
+            ? null
+            : { style: tStyle, start, duration: transitions[i - 1] as number },
     });
     if (i < n - 1) start = end - (transitions[i] as number);
   }
-  return { ok: true, timeline: { duration: L, fps, frameCount: Math.round(L * fps), segments } };
+  return { ok: true, timeline: { duration: L, fps, frameCount: Math.round(L * fps), loop, segments } };
 }
 
 /** Cheap summary for UI labels. `transition` is the nominal (unclamped) duration. */
@@ -81,7 +91,13 @@ export function timingSummary(
   const transition = transitionDuration(settings.transitionSpeed);
   if (photoCount <= 0) return { transition, avgPhoto: 0, minPhoto: 0, ok: false };
   const w = pacingWeights(photoCount, settings.pacing, settings.seed);
-  const { durations } = solveTiming(w, settings.totalDuration, new Array<number>(photoCount - 1).fill(transition));
+  const loop = settings.loop === true;
+  const { durations } = solveTiming(
+    w,
+    settings.totalDuration,
+    new Array<number>(loop ? photoCount : photoCount - 1).fill(transition),
+    loop,
+  );
   const avgPhoto = durations.reduce((a, b) => a + b, 0) / photoCount;
   const minPhoto = Math.min(...durations);
   const ok = minPossibleDuration(w, settings.totalDuration) >= MIN_PHOTO_DURATION - 1e-9;

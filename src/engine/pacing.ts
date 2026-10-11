@@ -40,17 +40,23 @@ export function pacingWeights(count: number, pacing: number, seed: number): numb
 export interface SolvedTiming {
   /** Photo durations D_i (including overlaps). */
   durations: number[];
-  /** Effective transition durations T_j between photo j and j+1 (after clamping). */
+  /** Effective transition durations T_j between photo j and j+1 (after clamping); with `wrap`, the last is last → first. */
   transitions: number[];
 }
 
 /**
  * Solve D_i = w_i · (L + ΣT) / N with each T_j ≤ 0.45 · min(D_j, D_{j+1}) (§4.1 steps 3–4).
  * `nominal[j]` is the requested transition between photo j and j+1 (0 for cuts).
+ * With `wrap` there is one more, `nominal[n-1]`, between the last photo and photo 0 (§4.9).
  */
-export function solveTiming(weights: readonly number[], total: number, nominal: readonly number[]): SolvedTiming {
+export function solveTiming(
+  weights: readonly number[],
+  total: number,
+  nominal: readonly number[],
+  wrap = false,
+): SolvedTiming {
   const n = weights.length;
-  const T = nominal.slice(0, Math.max(0, n - 1));
+  const T = nominal.slice(0, wrap ? n : Math.max(0, n - 1));
   const durationsFor = (): number[] => {
     const sumT = T.reduce((a, b) => a + b, 0);
     return weights.map((w) => (w * (total + sumT)) / n);
@@ -59,7 +65,7 @@ export function solveTiming(weights: readonly number[], total: number, nominal: 
   for (let iter = 0; iter < 500; iter++) {
     let change = 0;
     for (let j = 0; j < T.length; j++) {
-      const cap = MAX_TRANSITION_FRACTION * Math.min(D[j] as number, D[j + 1] as number);
+      const cap = MAX_TRANSITION_FRACTION * Math.min(D[j] as number, D[(j + 1) % n] as number);
       const cur = T[j] as number;
       if (cur > cap) {
         change = Math.max(change, cur - cap);

@@ -14,10 +14,26 @@ function layerAt(seg: Segment, t: number): Layer {
   };
 }
 
-/** Pure description of the frame at time `t` (clamped to [0, duration]). */
+/**
+ * Pure description of the frame at time `t` (clamped to [0, duration]). On a looping timeline
+ * `frameAt(duration)` is `frameAt(0)`, and the last `wrap` seconds transition from the last photo
+ * (evaluated at t) into photo 0 (evaluated at t − duration) — see PLAN §4.9.
+ */
 export function frameAt(timeline: Timeline, t: number): FrameDescriptor {
   const segs = timeline.segments;
-  const time = clamp(Number.isFinite(t) ? t : 0, 0, timeline.duration);
+  let time = clamp(Number.isFinite(t) ? t : 0, 0, timeline.duration);
+  if (timeline.loop && time >= timeline.duration) time = 0;
+  const first = segs[0] as Segment;
+  const wrap = timeline.loop ? first.transitionIn : null;
+  if (wrap && wrap.duration > 0 && time >= wrap.start) {
+    return {
+      kind: 'transition',
+      style: wrap.style,
+      progress: easeInOut((time - wrap.start) / wrap.duration),
+      from: layerAt(segs[segs.length - 1] as Segment, time),
+      to: layerAt(first, time - timeline.duration),
+    };
+  }
   // Last segment that has started by `time`.
   let idx = 0;
   for (let i = segs.length - 1; i > 0; i--) {
@@ -27,7 +43,8 @@ export function frameAt(timeline: Timeline, t: number): FrameDescriptor {
     }
   }
   const seg = segs[idx] as Segment;
-  const tr = seg.transitionIn;
+  // Segment 0's transitionIn is the wrap (handled above), never an intro transition.
+  const tr = idx === 0 ? null : seg.transitionIn;
   if (tr && tr.duration > 0 && time < tr.start + tr.duration) {
     const prev = segs[idx - 1] as Segment;
     return {
