@@ -17,18 +17,23 @@ describe('isSupportedBrowser', () => {
     expect(isSupportedBrowser({ userAgent: CHROME_MAC.replace('Chrome/', 'HeadlessChrome/') })).toBe(true);
   });
 
+  it('accepts desktop Microsoft Edge', () => {
+    const edgeBrands = { brands: [{ brand: 'Microsoft Edge' }, { brand: 'Chromium' }], mobile: false };
+    expect(isSupportedBrowser({ userAgent: `${CHROME_WIN} Edg/141.0.0.0`, userAgentData: edgeBrands })).toBe(true);
+    expect(isSupportedBrowser({ userAgent: `${CHROME_MAC} Edg/141.0.0.0` })).toBe(true);
+  });
+
   it('rejects other desktop browsers', () => {
     const cases = [
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
-      `${CHROME_WIN} Edg/141.0.0.0`,
       `${CHROME_WIN} OPR/115.0.0.0`,
     ];
     for (const userAgent of cases) expect(isSupportedBrowser({ userAgent }), userAgent).toBe(false);
-    // Edge / Brave without a giveaway in the UA string are caught by their client-hint brands.
-    const edge = { brands: [{ brand: 'Microsoft Edge' }, { brand: 'Chromium' }], mobile: false };
+    // Brave / Opera without a giveaway in the UA string are caught by their client-hint brands.
+    const opera = { brands: [{ brand: 'Opera' }, { brand: 'Chromium' }], mobile: false };
     const brave = { brands: [{ brand: 'Brave' }, { brand: 'Chromium' }], mobile: false };
-    expect(isSupportedBrowser({ userAgent: CHROME_WIN, userAgentData: edge })).toBe(false);
+    expect(isSupportedBrowser({ userAgent: CHROME_WIN, userAgentData: opera })).toBe(false);
     expect(isSupportedBrowser({ userAgent: CHROME_WIN, userAgentData: brave })).toBe(false);
   });
 
@@ -37,6 +42,7 @@ describe('isSupportedBrowser', () => {
       'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36',
       'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
       'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/141.0.0.0 Mobile/15E148 Safari/604.1',
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36 EdgA/141.0.0.0',
       'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
     ];
     for (const userAgent of cases) expect(isSupportedBrowser({ userAgent }), userAgent).toBe(false);

@@ -2,7 +2,7 @@
 
 Turn photos into an MP4 montage, entirely in the browser.
 
-**Try it:** https://grahamlehr.github.io/montage/ (latest desktop Chrome)
+**Try it:** https://grahamlehr.github.io/montage/ (latest desktop Chrome or Edge)
 
 ![Montage editing a 1080×1080 montage](docs/screenshot.png)
 
@@ -17,7 +17,7 @@ Turn photos into an MP4 montage, entirely in the browser.
 - Exports H.264 MP4 via WebCodecs (hardware encoder when available) and Mediabunny. No audio.
 
 ## Requirements
-Latest desktop **Google Chrome**. Other browsers aren't supported.
+Latest desktop **Google Chrome** or **Microsoft Edge** (Chromium-based, same WebCodecs H.264 encoders). Other browsers aren't supported.
 
 ## Privacy
 Everything runs locally in your browser. Photos are never uploaded anywhere.

@@ -1,7 +1,7 @@
 # Montage — Implementation Plan
 
 A fully client-side web app that turns a set of photos into a downloadable MP4 montage.
-Target: latest desktop Chrome on a high-spec machine. No backend. Photos never leave the browser.
+Target: latest desktop Chrome (or Microsoft Edge, also Chromium) on a high-spec machine. No backend. Photos never leave the browser.
 
 This plan is written to be executed by an **Opus orchestrator session** that delegates implementation
 to **Sonnet subagents** (`.claude/agents/montage-implementer.md`, `.claude/agents/montage-verifier.md`).
@@ -19,7 +19,7 @@ Section 8 is the orchestration playbook, section 9 the GitHub setup; sections 1�
 | R4 | Configurable length | **Total duration** (seconds). Per-photo time is derived. |
 | R5 | Animation styles | Motion (within a photo) + transitions (between photos). Styles can be **combined**: a pool of enabled styles applied across the montage (sequence or seeded random), plus **per-photo overrides**. |
 | R6 | Speed | **Three independent sliders**: *Transition speed*, *Motion intensity*, *Pacing*. |
-| — | Excluded | Background music / any audio. Text overlays. Video inputs. Non-Chrome browsers. |
+| — | Excluded | Background music / any audio. Text overlays. Video inputs. Browsers other than desktop Chrome and Edge. |
 
 ---
 
@@ -445,7 +445,7 @@ land it as a PR with green CI. Stop and ask me only if a requirement in §1 turn
 ### 9.2 Files to scaffold (wave 0)
 | File | Content |
 |---|---|
-| `README.md` | What it is, features, browser requirement (latest Chrome), privacy note (nothing uploaded), `npm` scripts, architecture summary (link PLAN.md), screenshot placeholder updated at v1. |
+| `README.md` | What it is, features, browser requirement (latest Chrome or Edge), privacy note (nothing uploaded), `npm` scripts, architecture summary (link PLAN.md), screenshot placeholder updated at v1. |
 | `.gitignore` | node_modules, dist, coverage, playwright-report, test-results, `tmp/`, `*.mp4` (except `docs/samples/`), `.DS_Store`, `.env*`. **Do not** ignore `.claude/agents/` or `CLAUDE.md`. |
 | `.editorconfig`, `.nvmrc` (`24`), `.prettierrc` | Basic formatting; add `prettier` + `eslint` (typescript-eslint, react-hooks) dev deps and `lint`/`format` scripts. |
 | `.github/workflows/ci.yml` | On PR and push to `main`: `npm ci` → `lint` → `typecheck` → `test` → `build`, Node from `.nvmrc`, npm cache. Second job `e2e` (see 9.5). |
