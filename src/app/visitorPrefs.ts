@@ -26,7 +26,7 @@ export function markBrowserNoticeDismissed(): void {
   }
 }
 
-/** True when this load will show the notice (not desktop Chrome, and not yet dismissed this session). */
+/** True when this load will show the notice (not desktop Chrome or Edge, and not yet dismissed this session). */
 export function browserNoticeWillShow(): boolean {
   return !isSupportedBrowser(currentBrowserInfo()) && !browserNoticeDismissed();
 }

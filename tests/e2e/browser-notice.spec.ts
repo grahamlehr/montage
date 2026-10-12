@@ -14,7 +14,7 @@ test('another browser gets a dismissible notice and can still use the app', asyn
   await page.goto('/');
   const notice = page.getByTestId('browser-notice');
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText('only supported in Google Chrome on a desktop');
+  await expect(notice).toContainText('only supported in Google Chrome or Microsoft Edge on a desktop');
 
   await page.getByTestId('browser-notice-dismiss').click();
   await expect(notice).toBeHidden();
