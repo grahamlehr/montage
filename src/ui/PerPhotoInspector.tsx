@@ -30,11 +30,14 @@ export function PerPhotoInspector() {
   const id = selectedId;
   const focus = override?.focus;
   const shot = shots[index];
-  const isLast = index === photos.length - 1;
+  // First / last of the photos that are actually in the video (loading or failed photos are skipped).
+  const readyIndices = photos.flatMap((p, i) => (p.status === 'ready' ? [i] : []));
+  const isFirst = index === (readyIndices[0] ?? 0);
+  const isLast = index === (readyIndices[readyIndices.length - 1] ?? photos.length - 1);
   const joined = !!shot && shot.position > 0;
-  const transitionDisabled = (index === 0 && !loop) || joined;
+  const transitionDisabled = (isFirst && !loop) || joined;
   const transitionLabel =
-    index === 0 ? (loop ? ' (used for the loop back to this photo)' : ' (not used for the first photo)') : '';
+    isFirst ? (loop ? ' (used for the loop back to this photo)' : ' (not used for the first photo)') : '';
 
   const setFocusFrom = (e: MouseEvent<HTMLButtonElement>) => {
     const r = e.currentTarget.getBoundingClientRect();

@@ -9,8 +9,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMontageStore } from './store';
 import type { PhotoItem } from './types';
 import { LAYOUT_LABELS, skippedFilesMessage } from './logic';
-import type { ShotMembership } from './logic';
 import { useShots } from './shots';
+import type { TrayShot } from './shots';
 import './ui.css';
 
 export interface PhotoTrayProps {
@@ -20,12 +20,12 @@ export interface PhotoTrayProps {
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif|gif|heic|heif)$/i;
 const isImageFile = (f: File) => f.type.startsWith('image/') || IMAGE_EXT.test(f.name);
 
-function shotPos(m: ShotMembership | undefined): 'start' | 'mid' | 'end' | undefined {
+function shotPos(m: TrayShot | undefined): 'start' | 'mid' | 'end' | undefined {
   if (!m || m.size < 2) return undefined;
   return m.position === 0 ? 'start' : m.position === m.size - 1 ? 'end' : 'mid';
 }
 
-function Tile({ item, index, selected, shot }: { item: PhotoItem; index: number; selected: boolean; shot?: ShotMembership }) {
+function Tile({ item, index, selected, shot }: { item: PhotoItem; index: number; selected: boolean; shot?: TrayShot }) {
   const select = useMontageStore((s) => s.select);
   const removePhoto = useMontageStore((s) => s.removePhoto);
   const hasOverride = useMontageStore((s) => item.source.id in s.overrides);
@@ -36,7 +36,7 @@ function Tile({ item, index, selected, shot }: { item: PhotoItem; index: number;
   const name = item.source.name;
   const pos = shotPos(shot);
   const shotText = shot && pos
-    ? `, ${LAYOUT_LABELS[shot.layout]} shot with photos ${index - shot.position + 1}–${index - shot.position + shot.size}`
+    ? `, ${LAYOUT_LABELS[shot.layout]} shot with photos ${shot.firstIndex + 1}–${shot.lastIndex + 1}`
     : '';
   /** Reliable one-step keyboard move when not mid-drag (dnd-kit's grid navigation can skip). */
   const onHandleKey = (e: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -109,7 +109,7 @@ export function PhotoTray({ onFilesSelected }: PhotoTrayProps) {
   const moveById = useMontageStore((s) => s.moveById);
   const shufflePhotos = useMontageStore((s) => s.shufflePhotos);
   const shots = useShots();
-  const grouped = shots.some((m) => m.size > 1);
+  const grouped = shots.some((m) => !!m && m.size > 1);
   const gridRef = useRef<HTMLUListElement>(null);
 
   // Mark the first/last tile of each wrapped grid row so a shot bracket split across rows gets proper ends.

@@ -167,6 +167,11 @@ interface Target {
   w: number;
   h: number;
 }
+/** A cached blurred cover; the crop depends on the focus it was rendered with. */
+interface BlurTarget extends Target {
+  focusX: number;
+  focusY: number;
+}
 interface PhotoTex {
   tex: WebGLTexture;
   w: number;
@@ -194,8 +199,8 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
   let listener: ((e: 'lost' | 'restored') => void) | null = null;
 
   let photos = new Map<number, PhotoTex>();
-  /** photoIndex -> blurKey(frame or cell size) -> blurred cover. */
-  let blurCache = new Map<number, Map<string, Target>>();
+  /** photoIndex -> blurKey(frame or cell size) -> blurred cover (re-rendered when the focus changes). */
+  let blurCache = new Map<number, Map<string, BlurTarget>>();
   let scratch: Target | null = null; // blur ping-pong
   let cellScratch: Target | null = null; // output-sized; a cell renders into its bottom-left sub-rect
   let layerA: Target | null = null;
@@ -331,10 +336,13 @@ export function createRenderer(canvas: AnyCanvas): MontageRenderer {
     const key = blurKey(fw, fh);
     let perPhoto = blurCache.get(index);
     const cached = perPhoto?.get(key);
-    if (cached) return cached;
+    if (cached && cached.focusX === focus.x && cached.focusY === focus.y) return cached;
     const g = gl!;
     const { w, h } = blurSize(fw, fh);
-    const out = makeTarget(w, h);
+    // A focus change re-renders into the existing target (same size), so the cache never grows per focus.
+    const out: BlurTarget = cached ?? { ...makeTarget(w, h), focusX: focus.x, focusY: focus.y };
+    out.focusX = focus.x;
+    out.focusY = focus.y;
     if (!scratch || scratch.w !== w || scratch.h !== h) {
       freeTarget(scratch);
       scratch = makeTarget(w, h);
