@@ -9,12 +9,15 @@ import type { MontageSettings, PhotoSource, Timeline } from '../types';
 /** How many shots behind / ahead of the current segment stay resident (§4.6, §4.7.6). */
 const BEHIND = 1;
 const AHEAD = 2; // next shot + one extra lookahead
+/** A failed decode is retried after this long if the photo is still wanted (transient failures, e.g. memory). */
+const DECODE_RETRY_MS = 2000;
 
 interface Entry {
   id: string;
   key: string; // decode bounds; a photo regrouped into a different cell size re-decodes
   bmp: ImageBitmap | null;
-  failed: boolean;
+  /** performance.now() of the last failed decode; null unless it failed. */
+  failedAt: number | null;
 }
 
 export interface PreviewStats {
@@ -27,6 +30,7 @@ export interface PreviewStats {
 
 export interface PreviewHooks {
   onTime(t: number): void;
+  /** Playback stopped on its own: reached the end (not looping) or the timeline went away. */
   onEnded(): void;
 }
 
@@ -86,7 +90,10 @@ export class PreviewEngine {
     }
     this.renderer.setBackground(settings.background);
     if (timeline && this.time > timeline.duration) this.time = timeline.duration;
-    if (!timeline && this.playing) this.pause();
+    if (!timeline && this.playing) {
+      this.pause();
+      this.hooks.onEnded();
+    }
     this.syncPhotos();
     this.renderCurrent();
     this.hooks.onTime(this.time);
@@ -191,12 +198,13 @@ export class PreviewEngine {
     for (const i of [...this.entries.keys()]) {
       const e = this.entries.get(i);
       const photo = this.photos[i];
-      if (!photo || !e || e.id !== photo.id || e.key !== wanted.get(i)) this.evict(i);
+      const retry = !!e && e.failedAt !== null && performance.now() - e.failedAt >= DECODE_RETRY_MS;
+      if (!photo || !e || e.id !== photo.id || e.key !== wanted.get(i) || retry) this.evict(i);
     }
     for (const { photoIndex: i, maxW, maxH } of decodes) {
       const photo = this.photos[i];
       if (!photo || this.entries.has(i)) continue;
-      const entry: Entry = { id: photo.id, key: `${maxW}x${maxH}`, bmp: null, failed: false };
+      const entry: Entry = { id: photo.id, key: `${maxW}x${maxH}`, bmp: null, failedAt: null };
       this.entries.set(i, entry);
       decodePhoto(photo.file, { maxW, maxH }).then(
         (bmp) => {
@@ -209,8 +217,14 @@ export class PreviewEngine {
           this.renderCurrent();
         },
         (err: unknown) => {
-          entry.failed = true;
+          entry.failedAt = performance.now();
           console.warn('Preview decode failed', photo.name, err);
+          // Retry even while paused (during playback the next tick would also pick it up).
+          setTimeout(() => {
+            if (this.disposed || this.entries.get(i) !== entry) return;
+            this.syncPhotos();
+            this.renderCurrent();
+          }, DECODE_RETRY_MS + 50);
         },
       );
     }

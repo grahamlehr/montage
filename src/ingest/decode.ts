@@ -52,7 +52,11 @@ async function decodeUpright(blob: Blob, heic: 'auto' | 'wasm'): Promise<ImageBi
 
 async function decodeFit(blob: Blob, maxW: number, maxH: number, heic: 'auto' | 'wasm'): Promise<ImageBitmap> {
   if (!(maxW >= 1) || !(maxH >= 1)) throw new IngestError('invalid-size', 'maxW and maxH must be >= 1');
-  const full = await decodeUpright(blob, heic);
+  return resizeUpright(await decodeUpright(blob, heic), maxW, maxH);
+}
+
+/** Fit an upright bitmap within maxW×maxH. Takes ownership of `full` (returned as-is or closed). */
+async function resizeUpright(full: ImageBitmap, maxW: number, maxH: number): Promise<ImageBitmap> {
   const target = fitWithin({ width: full.width, height: full.height }, maxW, maxH);
   if (target.width === full.width && target.height === full.height) return full;
   try {
@@ -95,4 +99,24 @@ export async function readPhotoSource(file: File, id?: string): Promise<PhotoSou
   const naturalHeight = bmp.height;
   bmp.close();
   return { id: id ?? newId(), file, name: file.name, naturalWidth, naturalHeight };
+}
+
+/**
+ * readPhotoSource + decodeThumbnail with a single full decode (ingest reads both for every added file).
+ * Caller must close() the returned thumbnail.
+ */
+export async function readPhotoWithThumbnail(
+  file: File,
+  id?: string,
+): Promise<{ source: PhotoSource; thumbnail: ImageBitmap }> {
+  const full = await decodeUpright(file, 'auto');
+  const source: PhotoSource = {
+    id: id ?? newId(),
+    file,
+    name: file.name,
+    naturalWidth: full.width,
+    naturalHeight: full.height,
+  };
+  const thumbnail = await resizeUpright(full, THUMB_BOX.maxW, THUMB_BOX.maxH);
+  return { source, thumbnail };
 }

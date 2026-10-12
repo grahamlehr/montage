@@ -1,4 +1,4 @@
-import { IngestError, decodeThumbnail, readPhotoSource } from '../ingest';
+import { IngestError, readPhotoWithThumbnail } from '../ingest';
 import type { PhotoItem } from '../ui';
 import { useMontageStore } from '../ui';
 
@@ -8,8 +8,8 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
-async function thumbnailUrl(file: File): Promise<string> {
-  const bmp = await decodeThumbnail(file);
+/** Encodes the thumbnail as a JPEG object URL; closes `bmp`. */
+async function thumbnailUrl(bmp: ImageBitmap): Promise<string> {
   try {
     const canvas = new OffscreenCanvas(bmp.width, bmp.height);
     const ctx = canvas.getContext('2d');
@@ -30,7 +30,8 @@ function messageOf(e: unknown): string {
 /**
  * Adds files to the store immediately (status 'loading', in selection order), then reads dimensions and
  * thumbnails with bounded concurrency. Unsupported / corrupt files end up with status 'error'.
- * The placeholder `source` object is completed in place (updatePhoto cannot replace `source`).
+ * Each file is decoded once for both its dimensions and its thumbnail; the placeholder `source` is then
+ * replaced by the real one (same id).
  */
 export async function ingestFiles(files: File[]): Promise<void> {
   const store = useMontageStore;
@@ -48,8 +49,8 @@ export async function ingestFiles(files: File[]): Promise<void> {
       if (!item) return;
       const { id, file } = item.source;
       try {
-        const info = await readPhotoSource(file, id);
-        const url = await thumbnailUrl(file);
+        const { source: info, thumbnail } = await readPhotoWithThumbnail(file, id);
+        const url = await thumbnailUrl(thumbnail);
         if (!store.getState().photos.some((p) => p.source.id === id)) {
           URL.revokeObjectURL(url); // removed while loading
           continue;

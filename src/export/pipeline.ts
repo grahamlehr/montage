@@ -174,11 +174,24 @@ async function run(
   try {
     const canvas = d.createCanvas(width, height);
     sourceInitialised = true;
-    await source.init(canvas, request, (done, tot) =>
+    setWake(wake);
+    // Cancel must not wait for the initial decodes (large HEICs can take seconds each): race init against a
+    // wake. Decodes still in flight are released by source.dispose() in the finally below.
+    const initDone = source.init(canvas, request, (done, tot) =>
       post100({ type: 'progress', phase: 'decoding', done, total: tot }, done >= tot),
     );
+    initDone.catch(() => undefined); // may settle after a cancel; a real failure is rethrown by the race
+    let onWake = () => {};
+    const woken = new Promise<void>((resolve) => {
+      onWake = resolve;
+      waiters.add(onWake);
+    });
+    try {
+      await Promise.race([initDone, woken]);
+    } finally {
+      waiters.delete(onWake);
+    }
     check();
-    setWake(wake);
 
     const base = baseEncoderConfig(settings);
     const tried: HwPref[] = [];
@@ -299,9 +312,15 @@ async function run(
 
         check();
         post100({ type: 'progress', phase: 'finalizing', done: total, total }, true);
-        const flushed = enc.flush();
-        flushed.catch((e: unknown) => failEncoder(e));
-        await Promise.race([flushed, waitFor(() => false)]);
+        let flushed = false;
+        enc.flush().then(
+          () => {
+            flushed = true;
+            wake();
+          },
+          (e: unknown) => failEncoder(e),
+        );
+        await waitFor(() => flushed);
         check();
         throwIfFailed();
         await packetChain;

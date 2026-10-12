@@ -195,4 +195,25 @@ describe('runExport encoder fallback', () => {
     expect(t.frames.every((f) => f.closed)).toBe(true);
     expect(st.sourceDisposed).toBe(1);
   });
+
+  it('cancel while the source is still decoding rejects promptly without waiting for init', async () => {
+    const t = setup([null]);
+    t.source.init = () => new Promise<void>(() => undefined); // decodes that never finish
+    const run = runExport(request, t.source, () => undefined, t.deps);
+    await Promise.resolve();
+    run.handle.cancel();
+    await expect(run.result).rejects.toBeInstanceOf(CancelledError);
+    const st = t.stats();
+    expect(st.encoders).toBe(0);
+    expect(st.sourceDisposed).toBe(1);
+  });
+
+  it('a failing source init still rejects with its error', async () => {
+    const t = setup([null]);
+    t.source.init = async () => {
+      throw new Error('decode failed');
+    };
+    await expect(runExport(request, t.source, () => undefined, t.deps).result).rejects.toThrow('decode failed');
+    expect(t.stats().sourceDisposed).toBe(1);
+  });
 });

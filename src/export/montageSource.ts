@@ -89,6 +89,10 @@ export function createMontageSource(): FrameSource {
       for (const d of ahead) void load(d).catch(() => undefined);
       await Promise.all(needed.map((d) => load(d)));
       renderer.draw(frameAt(timeline, t));
+      // A lost context makes draw() a no-op, which would silently encode stale frames: fail the export instead.
+      if (renderer.isContextLost()) {
+        throw new Error('The graphics (WebGL) context was lost during export. Please try exporting again.');
+      }
     },
     dispose() {
       disposed = true;

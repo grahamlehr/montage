@@ -19,6 +19,8 @@ const decodeSizes = new Map<number, { maxW: number; maxH: number }>();
 let shotSizes: number[] | null = null;
 /** true = use the real buildTimeline/frameAt (loop tests); false = hand-built shot timelines */
 let realEngine = false;
+/** simulated WebGL context loss on the fake renderer */
+let contextLost = false;
 
 vi.mock('../engine', async (importOriginal) => {
   const real = await importOriginal<typeof import('../engine')>();
@@ -67,6 +69,7 @@ vi.mock('../render', () => ({
       drawn.push({ t: -1, resident: [...resident.keys()].sort((a, b) => a - b), photos });
     },
     dispose() {},
+    isContextLost: () => contextLost,
   }),
 }));
 
@@ -94,9 +97,19 @@ beforeEach(() => {
   decodeSizes.clear();
   shotSizes = null;
   realEngine = false;
+  contextLost = false;
 });
 
 describe('createMontageSource residency and rewind', () => {
+  it('fails the frame instead of encoding a stale canvas when the WebGL context is lost', async () => {
+    const src = createMontageSource();
+    await src.init({} as OffscreenCanvas, request(3), () => undefined);
+    await src.draw(0, 0);
+    contextLost = true;
+    await expect(src.draw(1, 1 / 30)).rejects.toThrow(/context was lost/);
+    src.dispose();
+  });
+
   it('keeps only previous/current/next resident and closes everything on dispose', async () => {
     const src = createMontageSource();
     await src.init({} as OffscreenCanvas, request(6), () => undefined);
