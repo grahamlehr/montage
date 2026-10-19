@@ -9,3 +9,9 @@ tmp/
 .DS_Store
 .env*
 *.tsbuildinfo
+
+# --- repo kit additions ---
+!.env.example
+.ua
+.venv/
+.claude/settings.local.json
