@@ -1,6 +1,6 @@
 import { frameAt } from '../engine';
 import { photosForSegments, segmentIndexAt, segmentWindow } from '../export/residency';
-import type { PhotoDecode } from '../export/residency';
+import type { PhotoDecode, Size } from '../export/residency';
 import { decodePhoto } from '../ingest';
 import { createRenderer } from '../render';
 import type { MontageRenderer, RendererStats } from '../render';
@@ -53,6 +53,10 @@ export class PreviewEngine {
   private startNow = 0;
   private startTime = 0;
   private disposed = false;
+  /** Natural sizes of `photos`, rebuilt only when the photo list changes. */
+  private naturals: Size[] = [];
+  /** Segment index at the last syncPhotos; -1 forces the next sync. */
+  private lastSyncedSegment = -1;
 
   private hooks: PreviewHooks;
 
@@ -82,7 +86,9 @@ export class PreviewEngine {
   update(timeline: Timeline | null, photos: PhotoSource[], settings: MontageSettings): void {
     if (this.disposed) return;
     this.timeline = timeline;
+    if (photos !== this.photos) this.naturals = photos.map((p) => ({ width: p.naturalWidth, height: p.naturalHeight }));
     this.photos = photos;
+    this.lastSyncedSegment = -1;
     this.settings = settings;
     const rs = this.renderer.stats();
     if (rs.width !== settings.width || rs.height !== settings.height) {
@@ -106,6 +112,7 @@ export class PreviewEngine {
       this.startNow = performance.now();
       this.startTime = this.time;
     }
+    this.lastSyncedSegment = -1;
     this.syncPhotos();
     this.renderCurrent();
     this.hooks.onTime(this.time);
@@ -113,6 +120,7 @@ export class PreviewEngine {
 
   setLoop(loop: boolean): void {
     this.loop = loop;
+    this.lastSyncedSegment = -1;
     this.syncPhotos();
   }
 
@@ -154,7 +162,11 @@ export class PreviewEngine {
       }
     }
     this.time = t;
-    this.syncPhotos();
+    // Residency only changes with the segment (or a pending decode retry), so skip the per-frame diff otherwise.
+    const seg = segmentIndexAt(this.timeline, t);
+    let retryPending = false;
+    for (const e of this.entries.values()) if (e.failedAt !== null) retryPending = true;
+    if (seg !== this.lastSyncedSegment || retryPending) this.syncPhotos();
     this.renderCurrent();
     this.hooks.onTime(t);
     if (ended) {
@@ -177,8 +189,7 @@ export class PreviewEngine {
     const cur = segmentIndexAt(timeline, this.time);
     // On a looping timeline the last shot's next is shot 0 (the wrap, §4.9).
     const segs = segmentWindow(timeline.segments.length, cur, BEHIND, AHEAD, timeline.loop);
-    const naturals = this.photos.map((p) => ({ width: p.naturalWidth, height: p.naturalHeight }));
-    return photosForSegments(timeline, segs, { width: settings.width, height: settings.height }, naturals);
+    return photosForSegments(timeline, segs, { width: settings.width, height: settings.height }, this.naturals);
   }
 
   private evict(i: number): void {
@@ -192,6 +203,7 @@ export class PreviewEngine {
 
   private syncPhotos(): void {
     if (!this.settings) return;
+    if (this.timeline) this.lastSyncedSegment = segmentIndexAt(this.timeline, this.time);
     const wanted = new Map<number, string>();
     const decodes = this.wantedPhotos();
     for (const d of decodes) wanted.set(d.photoIndex, `${d.maxW}x${d.maxH}`);

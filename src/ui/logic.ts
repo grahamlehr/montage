@@ -1,7 +1,8 @@
 import {
-  DIM_MAX, DIM_MIN, DURATION_MAX, DURATION_MIN, GUTTER_MAX, MAX_MACROBLOCKS, TRANSITION_FAST, TRANSITION_SLOW, clampEvenDim,
+  DIM_MAX, DIM_MIN, DURATION_MAX, DURATION_MIN, GUTTER_MAX, MAX_MACROBLOCKS, clampEvenDim,
   fitsEncoderArea, macroblocks, maxEvenHeightFor,
 } from '../lib/constants';
+import { transitionDuration } from '../engine';
 import { mulberry32, shuffle } from '../lib/rng';
 import type {
   FitMode, Grouping, LayoutStyle, MontageSettings, MotionStyle, MultiLayout, PhotoOverrides, TransitionStyle,
@@ -313,7 +314,7 @@ export interface TimingEstimate {
 export function estimateTiming(s: MontageSettings, shotCount: number): TimingEstimate {
   const n = Math.max(1, shotCount);
   const count = s.loop ? n : n - 1; // a seamless loop adds the wrap transition (§4.9)
-  let transition = count <= 0 ? 0 : TRANSITION_SLOW + (TRANSITION_FAST - TRANSITION_SLOW) * s.transitionSpeed;
+  let transition = count <= 0 ? 0 : transitionDuration(s.transitionSpeed);
   let avgShot = (s.totalDuration + count * transition) / n;
   if (transition > 0.45 * avgShot) {
     // transitions are clamped to 45% of the shot duration (§4.1 step 4)

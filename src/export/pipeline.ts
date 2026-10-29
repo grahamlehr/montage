@@ -57,7 +57,7 @@ export interface VideoEncoderLike {
 export interface MuxerLike {
   start(): Promise<void>;
   add(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): Promise<void>;
-  /** Finalize and return the MP4 bytes. */
+  /** Finalise and return the MP4 bytes. */
   finalize(): Promise<ArrayBuffer | null>;
   cancel(): Promise<void>;
 }

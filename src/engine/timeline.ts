@@ -49,6 +49,19 @@ function shotTransitions(
   return resolveStyles(firsts, overrides, settings);
 }
 
+/** Nominal duration of each transition (0 for a 'cut'): one per shot boundary, plus the loop wrap when `loop`. */
+function nominalTransitions(
+  shotTrans: Pick<ReturnType<typeof resolveStyles>, 'transitions' | 'wrap'>,
+  shots: number,
+  nominalT: number,
+  loop: boolean,
+): number[] {
+  const nominal: number[] = [];
+  for (let j = 0; j < shots - 1; j++) nominal.push(shotTrans.transitions[j + 1] === 'cut' ? 0 : nominalT);
+  if (loop) nominal.push(shotTrans.wrap === 'cut' ? 0 : nominalT);
+  return nominal;
+}
+
 export function buildTimeline(
   photos: readonly GroupablePhoto[],
   overrides: Record<string, PhotoOverrides>,
@@ -70,11 +83,8 @@ export function buildTimeline(
 
   const motions = resolveStyles(photos, overrides, settings).motions;
   const shotTrans = shotTransitions(photos, groups, overrides, settings);
-  const nominalT = transitionDuration(settings.transitionSpeed);
-  const nominal: number[] = [];
-  for (let j = 0; j < S - 1; j++) nominal.push(shotTrans.transitions[j + 1] === 'cut' ? 0 : nominalT);
   const loop = settings.loop === true;
-  if (loop) nominal.push(shotTrans.wrap === 'cut' ? 0 : nominalT);
+  const nominal = nominalTransitions(shotTrans, S, transitionDuration(settings.transitionSpeed), loop);
   const { durations, transitions } = solveTiming(weights, L, nominal, loop);
   const wrapT = loop ? (transitions[S - 1] as number) : 0;
 
@@ -174,12 +184,8 @@ export function timingSummary(
   const shots = groups.length;
   const w = shotWeights(groups, settings.pacing, settings.seed);
   const loop = settings.loop === true;
-  const { durations } = solveTiming(
-    w,
-    settings.totalDuration,
-    new Array<number>(loop ? shots : shots - 1).fill(transition),
-    loop,
-  );
+  const nominal = nominalTransitions(shotTransitions(photos, groups, overrides, settings), shots, transition, loop);
+  const { durations } = solveTiming(w, settings.totalDuration, nominal, loop);
   const avgShot = durations.reduce((a, b) => a + b, 0) / shots;
   const minShot = Math.min(...durations);
   const ok = minPossibleDuration(w, settings.totalDuration) >= MIN_PHOTO_DURATION - 1e-9;
