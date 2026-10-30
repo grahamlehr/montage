@@ -28,6 +28,11 @@ export function startExport(
       onMessage(m);
       finish(m);
     };
+    worker.onmessageerror = () => {
+      const m: ExportMessage = { type: 'error', message: 'Export worker sent an unreadable message' };
+      onMessage(m);
+      finish(m);
+    };
   });
   worker.postMessage({ type: 'start', request });
   return {

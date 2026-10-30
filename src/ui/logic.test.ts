@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { transitionDuration } from '../engine';
 import { DEFAULT_SETTINGS, fitsEncoderArea } from '../lib/constants';
 import {
   DIMENSION_PRESETS, applySettingsPatch, applySettingsPatchDetailed, areaNoteText, atCapNote, arrayMove, dimsForRatio, estimateTiming, formatBytes, formatRatio, lockedDims,
@@ -178,12 +179,14 @@ describe('overrides', () => {
 describe('estimates', () => {
   it('timing', () => {
     const t = estimateTiming({ ...DEFAULT_SETTINGS, loop: false, totalDuration: 30, transitionSpeed: 0 }, 10);
-    expect(t.transition).toBeCloseTo(1.6);
-    expect(t.avgShot).toBeCloseTo((30 + 9 * 1.6) / 10);
+    expect(t.transition).toBeCloseTo(transitionDuration(0));
+    expect(t.avgShot).toBeCloseTo((30 + 9 * t.transition) / 10);
+    const mid = estimateTiming({ ...DEFAULT_SETTINGS, loop: false, totalDuration: 30, transitionSpeed: 0.5 }, 10);
+    expect(mid.transition).toBeCloseTo(transitionDuration(0.5));
     expect(t.shots).toBe(10);
     // seamless loop adds the wrap transition: N transitions instead of N-1
     const l = estimateTiming({ ...DEFAULT_SETTINGS, loop: true, totalDuration: 30, transitionSpeed: 0 }, 10);
-    expect(l.avgShot).toBeCloseTo((30 + 10 * 1.6) / 10);
+    expect(l.avgShot).toBeCloseTo((30 + 10 * l.transition) / 10);
     expect(estimateTiming(DEFAULT_SETTINGS, 1000).ok).toBe(false);
   });
   it('applySettingsPatch keeps loop boolean', () => {

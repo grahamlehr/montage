@@ -21,7 +21,7 @@ export interface ExportBarProps {
 const PHASE_LABEL: Record<Progress['phase'], string> = {
   decoding: 'Decoding photos',
   encoding: 'Encoding',
-  finalizing: 'Finalizing',
+  finalizing: 'Finalising',
 };
 
 function formatEta(s: number): string {

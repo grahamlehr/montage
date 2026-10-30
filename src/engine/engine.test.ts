@@ -380,4 +380,15 @@ describe('timingSummary', () => {
     expect(timingSummary(photos(500), S({ totalDuration: 30 })).ok).toBe(false);
     expect(timingSummary(photos(0), S()).ok).toBe(false);
   });
+  it('treats cut transitions as zero length, like buildTimeline', () => {
+    const o = { totalDuration: 30, transitionPool: ['cut' as const] };
+    const s = timingSummary(photos(10), S(o));
+    expect(s.transition).toBeCloseTo(transitionDuration(DEFAULT_SETTINGS.transitionSpeed), 6);
+    expect(s.avgShot).toBeCloseTo(3, 6);
+    const l = timingSummary(photos(10), S({ ...o, loop: true }));
+    expect(l.avgShot).toBeCloseTo(3, 6);
+    const tl = build(10, o);
+    const mean = tl.segments.reduce((a, g) => a + (g.end - g.start), 0) / tl.segments.length;
+    expect(s.avgShot).toBeCloseTo(mean, 6);
+  });
 });

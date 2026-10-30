@@ -21,6 +21,11 @@ let shotSizes: number[] | null = null;
 let realEngine = false;
 /** simulated WebGL context loss on the fake renderer */
 let contextLost = false;
+/** callback registered through onContextEvent on the fake renderer */
+let contextCb: ((e: 'lost' | 'restored') => void) | null = null;
+/** number of upcoming decodePhoto calls that should reject */
+let failDecodes = 0;
+let decodeCalls = 0;
 
 vi.mock('../engine', async (importOriginal) => {
   const real = await importOriginal<typeof import('../engine')>();
@@ -42,7 +47,12 @@ vi.mock('../ingest', () => ({
   decodeSizeFor: (out: { width: number; height: number }) => ({ maxW: out.width, maxH: out.height }),
   decodePhoto: async (file: File, size: { maxW: number; maxH: number }) => {
     decodeSizes.set(Number(file.name.replace(/\D/g, '')), size);
+    decodeCalls++;
     await Promise.resolve();
+    if (failDecodes > 0) {
+      failDecodes--;
+      throw new Error('decode failed');
+    }
     const bmp: FakeBitmap = {
       index: Number(file.name.replace(/\D/g, '')),
       closed: false,
@@ -70,6 +80,9 @@ vi.mock('../render', () => ({
     },
     dispose() {},
     isContextLost: () => contextLost,
+    onContextEvent(cb: (e: 'lost' | 'restored') => void) {
+      contextCb = cb;
+    },
   }),
 }));
 
@@ -98,6 +111,9 @@ beforeEach(() => {
   shotSizes = null;
   realEngine = false;
   contextLost = false;
+  contextCb = null;
+  failDecodes = 0;
+  decodeCalls = 0;
 });
 
 describe('createMontageSource residency and rewind', () => {
@@ -108,6 +124,28 @@ describe('createMontageSource residency and rewind', () => {
     contextLost = true;
     await expect(src.draw(1, 1 / 30)).rejects.toThrow(/context was lost/);
     src.dispose();
+  });
+
+  it('fails the next frame after a context restore (textures are wiped)', async () => {
+    const src = createMontageSource();
+    await src.init({} as OffscreenCanvas, request(3), () => undefined);
+    await src.draw(0, 0);
+    contextCb?.('lost');
+    contextCb?.('restored');
+    await expect(src.draw(1, 1 / 30)).rejects.toThrow(/context was lost/);
+    src.dispose();
+  });
+
+  it('does not cache a rejected decode: the next draw retries it', async () => {
+    const src = createMontageSource();
+    failDecodes = 1;
+    await expect(src.init({} as OffscreenCanvas, request(3), () => undefined)).rejects.toThrow(/decode failed/);
+    const before = decodeCalls;
+    await src.draw(0, 0);
+    expect(decodeCalls).toBeGreaterThan(before);
+    expect(resident.has(0)).toBe(true);
+    src.dispose();
+    await flush();
   });
 
   it('keeps only previous/current/next resident and closes everything on dispose', async () => {

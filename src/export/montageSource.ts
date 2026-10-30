@@ -21,6 +21,8 @@ export function createMontageSource(): FrameSource {
   let sizes: Size[] = [];
   let out: Size = { width: 0, height: 0 };
   let disposed = false;
+  /** Set on any context loss or restore: a restore wipes every texture, so later frames would be blank. */
+  let contextLost = false;
   const entries = new Map<number, Promise<ImageBitmap | null>>();
 
   const load = ({ photoIndex: i, maxW, maxH }: PhotoDecode): Promise<ImageBitmap | null> => {
@@ -28,14 +30,21 @@ export function createMontageSource(): FrameSource {
     if (existing) return existing;
     const file = files[i];
     if (!file) return Promise.resolve(null);
-    const p = decodePhoto(file, { maxW, maxH }).then((bmp) => {
-      if (disposed || entries.get(i) !== p) {
-        bmp.close(); // released while decoding
-        return null;
-      }
-      renderer?.setPhoto(i, bmp);
-      return bmp;
-    });
+    const p: Promise<ImageBitmap | null> = decodePhoto(file, { maxW, maxH }).then(
+      (bmp) => {
+        if (disposed || entries.get(i) !== p) {
+          bmp.close(); // released while decoding
+          return null;
+        }
+        renderer?.setPhoto(i, bmp);
+        return bmp;
+      },
+      (err: unknown) => {
+        // Don't cache a failed decode: the next draw retries it.
+        if (entries.get(i) === p) entries.delete(i);
+        throw err;
+      },
+    );
     entries.set(i, p);
     return p;
   };
@@ -62,6 +71,9 @@ export function createMontageSource(): FrameSource {
       if (!built.ok) throw new Error(built.error);
       timeline = built.timeline;
       renderer = createRenderer(canvas);
+      renderer.onContextEvent(() => {
+        contextLost = true;
+      });
       renderer.setSize(settings.width, settings.height);
       renderer.setBackground(settings.background);
       const first = photosOfSegments([0, 1]);
@@ -90,7 +102,7 @@ export function createMontageSource(): FrameSource {
       await Promise.all(needed.map((d) => load(d)));
       renderer.draw(frameAt(timeline, t));
       // A lost context makes draw() a no-op, which would silently encode stale frames: fail the export instead.
-      if (renderer.isContextLost()) {
+      if (renderer.isContextLost() || contextLost) {
         throw new Error('The graphics (WebGL) context was lost during export. Please try exporting again.');
       }
     },
