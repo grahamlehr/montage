@@ -66,6 +66,8 @@ CONTRACT REQUESTS in your report.
 ## Doc map
 - `PLAN.md`: the full spec and agreed plan
 - `README.md`: user-facing overview and privacy notes
+- `docs/UA_ONBOARDING.md`: onboarding guide (layers, key concepts, guided tour, hotspots), generated from the
+  Understand-Anything graph; regenerate with `/understand` then `/understand-onboard`
 - `docs/HANDOFF.md`: current state and the prompt for the next session (`/handoff`)
 - `docs/DECISIONS.md`: decisions already made. Don't relitigate them.
 - `docs/STATUS.md`, `docs/HISTORY.md`: status and field notes (create when needed)
