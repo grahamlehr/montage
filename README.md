@@ -11,8 +11,11 @@ Turn photos into an MP4 montage, entirely in the browser.
 - Any output size: presets (9:16, 16:9, 1:1, 4:5, 4:3, 3:4, 21:9, 2:3) or arbitrary W×H from 128 to 4096 px per side,
   up to 9.4 MP in total (e.g. 4096×2304 or 3072×3072) — the largest frame Chrome's H.264 encoders accept.
 - Set the total length; per-photo timing is derived, with an optional dynamic rhythm.
-- Motion styles (Ken Burns, zoom, pan) and 11 transitions, combined from pools in sequence or seeded
-  random order, with per-photo overrides.
+- Motion styles (Ken Burns, zoom, pan) and 16 transitions plus a plain cut, combined from pools in sequence or
+  seeded random order, with per-photo overrides.
+- Multi-photo shots: duo, trio, quad, picture-in-picture and polaroid stack layouts, grouped automatically or in a
+  seeded mix, or turned off for one photo per shot.
+- Seamless loop: the last shot transitions back into the first (on by default).
 - Three independent sliders: transition speed, motion intensity, pacing.
 - Exports H.264 MP4 via WebCodecs (hardware encoder when available) and Mediabunny. No audio.
 
@@ -30,7 +33,7 @@ override the measurement ID with `VITE_GA_ID` (an empty value disables it).
 
 ## Development
 ```bash
-npm install
+npm ci
 npm run dev        # http://localhost:5173
 ```
 
@@ -41,7 +44,7 @@ npm run dev        # http://localhost:5173
 | `npm test` | Unit tests (Vitest) |
 | `npm run test:e2e` | End-to-end tests in Google Chrome (Playwright) |
 | `npm run lint` / `npm run format` | ESLint / Prettier |
-| `npm run fixtures` | Generate test photos (macOS, uses `sips`) |
+| `npm run fixtures` | Regenerate the committed test photos (macOS, needs ImageMagick and `sips`) |
 
 ## Architecture
 A React UI builds a deterministic timeline (`buildTimeline` → `frameAt(t)`) that a WebGL2 renderer draws

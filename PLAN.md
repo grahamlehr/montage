@@ -253,6 +253,9 @@ Given N photos, total `L`:
 - Backpressure: await while `encoder.encodeQueueSize > 8`.
 - Progress events at most every 100 ms with ETA. `AbortSignal`-style cancel via message.
 - Result: Blob → `URL.createObjectURL` → download `montage-{w}x{h}-{L}s.mp4`.
+- Failure: a WebGL context loss or restore fails the export (a restore wipes textures, so frames would encode blank).
+  An unreadable worker message settles the export as an error rather than hanging. A failed photo decode isn't
+  cached, so the next draw retries it.
 
 ### 4.8 Preview
 - Same renderer on an `HTMLCanvasElement`, scaled via CSS to fit the panel (letterboxed for odd ratios).

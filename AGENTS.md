@@ -1,7 +1,7 @@
 # Montage
 
 ## What this is
-Client-side web app: photos → MP4 montage (H.264 via WebCodecs + Mediabunny). Latest desktop Chrome only.
+Client-side web app: photos → MP4 montage (H.264 via WebCodecs + Mediabunny). Latest desktop Chrome or Edge only.
 No backend; photos never leave the browser. Full spec: **PLAN.md** (§1 requirements, §2 architecture,
 §3 contract, §4 behaviour, §5 tasks/acceptance, §8 orchestration).
 
@@ -15,18 +15,19 @@ No backend; photos never leave the browser. Full spec: **PLAN.md** (§1 requirem
 | Install | `npm ci` |
 | Dev | `npm run dev` (Vite dev server: app + harness pages, http://localhost:5173) |
 | Build | `npm run build` (typecheck + production build) |
-| Typecheck | `npm run typecheck` (`tsc -b`) |
-| Test | `npm test` (Vitest unit tests, `src/**/*.test.ts`) |
-| E2E | `npm run test:e2e` (Playwright in Google Chrome) |
+| Typecheck | `npm run typecheck` (`tsc -b --noEmit`) |
+| Test | `npm test` (Vitest unit tests, `src/**/*.test.ts` and `*.test.tsx`) |
+| E2E | `npm run test:e2e` (Playwright in Google Chrome; own dev server on port 5199, override with `E2E_PORT`) |
 | Lint / format | `npm run lint` / `npm run format` (ESLint / Prettier) |
-| Fixtures | `npm run fixtures` (generate test photos into `fixtures/`) |
+| Fixtures | `npm run fixtures` (regenerate the committed test photos in `fixtures/`; macOS, needs ImageMagick and `sips`) |
+| Git hooks | `sh scripts/install-hooks.sh` (pre-commit gitleaks scan of staged changes) |
 | Deploy | Merge to `main` runs `.github/workflows/pages.yml` and publishes `dist/` to GitHub Pages |
 
 ## Environments
 | Env | URL / host | How to reach it | Notes |
 |---|---|---|---|
 | Local | `http://localhost:5173` | `npm run dev` | Harness pages at `/harness/<module>.html` |
-| Staging | `<ask Graham>` | none known | Verify locally before merging |
+| Staging | none | no staging deploy workflow exists | Verify locally before merging |
 | Prod | https://grahamlehr.github.io/montage/ | push to `main` (pages workflow) | **Protected**: public site, real users. Changes need Graham's explicit OK |
 
 ## Invariants
@@ -68,6 +69,7 @@ CONTRACT REQUESTS in your report.
 - `README.md`: user-facing overview and privacy notes
 - `docs/UA_ONBOARDING.md`: onboarding guide (layers, key concepts, guided tour, hotspots), generated from the
   Understand-Anything graph; regenerate with `/understand` then `/understand-onboard`
+- `docs/proposals/`: accepted design proposals (`multi-photo-shots.md`, contract v2)
 - `docs/HANDOFF.md`: current state and the prompt for the next session (`/handoff`)
 - `docs/DECISIONS.md`: decisions already made. Don't relitigate them.
 - `docs/STATUS.md`, `docs/HISTORY.md`: status and field notes (create when needed)

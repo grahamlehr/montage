@@ -33,8 +33,8 @@ export type LayoutStyle = 'single' | 'duo' | 'trio' | 'quad' | 'pip' | 'polaroid
 export type MultiLayout = Exclude<LayoutStyle, 'single'>;
 
 /**
- * off   = one photo per shot (default; output identical to v1).
- * auto  = pair consecutive photos whose orientation fights the output (portraits in landscape, landscapes in portrait).
+ * off   = one photo per shot (output identical to v1).
+ * auto  = default; pair consecutive photos whose orientation fights the output (portraits in landscape, landscapes in portrait).
  * mixed = auto, plus seeded multi-photo shots drawn from `layoutPool`.
  */
 export type Grouping = 'off' | 'auto' | 'mixed';
@@ -83,7 +83,7 @@ export interface MontageSettings {
   fit: FitMode;
   background: string; // CSS hex, used for contain letterbox
   quality: 'standard' | 'high' | 'max';
-  grouping: Grouping; // default 'off'
+  grouping: Grouping; // default 'auto'
   layoutPool: MultiLayout[]; // ≥1 enabled layouts, used when grouping = 'mixed'
   gutter: number; // 0..0.04 of the shorter output side, filled with `background`
   reveal: CellReveal;
