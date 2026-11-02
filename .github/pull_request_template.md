@@ -7,8 +7,10 @@
 <!-- commands run, ffprobe output, harness screenshots -->
 
 ## Checklist
+- [ ] `npm run lint`
 - [ ] `npm run typecheck`
 - [ ] `npm test`
 - [ ] `npm run build`
-- [ ] `npm run test:e2e` (from wave 2)
-- [ ] Path ownership respected (CLAUDE.md)
+- [ ] `npm run test:e2e`
+- [ ] Path ownership respected (AGENTS.md)
+- [ ] Docs updated; verified where: local or prod

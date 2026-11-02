@@ -168,7 +168,7 @@ Follow these in order; each builds on the last.
 - `client.ts`: the main-thread side. It spawns the worker, relays progress, handles cancel and triggers the
   download.
 - `montageSource.ts`: the production `FrameSource`. It decodes, rebuilds the timeline and renders inside the
-  worker.
+  worker. Any WebGL context loss or restore fails the export rather than encoding blank frames.
 - `encoderConfig.ts` / `avc.ts`: encoder config probing with a preflight check, and H.264 level selection.
 - `residency.ts`: shot-based memory windows, shared with the preview.
 - `frameSource.ts`, `testPatternSource.ts`, `fileName.ts`, `shotFixtures.ts` (test-only).
